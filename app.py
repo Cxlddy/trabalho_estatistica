@@ -1,14 +1,12 @@
 """
-app.py — Dashboard principal para análise de dados do TCC.
-Tecnologias: Streamlit, Plotly, Pandas.
+app.py — Dashboard principal de análise de dados.
+Tecnologias: Streamlit, Altair, Pandas.
 """
 
 import streamlit as st
 import pandas as pd
 import numpy as np
-import plotly.express as px
-import plotly.graph_objects as go
-from plotly.subplots import make_subplots
+import altair as alt
 
 from utils import (
     fetch_data,
@@ -25,7 +23,7 @@ from utils import (
 # ---------------------------------------------------------------------------
 
 st.set_page_config(
-    page_title="Dashboard TCC",
+    page_title="Painel Analítico",
     page_icon=None,
     layout="wide",
     initial_sidebar_state="expanded",
@@ -36,6 +34,7 @@ st.set_page_config(
 # ---------------------------------------------------------------------------
 
 CUSTOM_CSS = """
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
 <style>
     /* Importar fonte */
     @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
@@ -43,6 +42,8 @@ CUSTOM_CSS = """
     /* Reset e base */
     html, body, [class*="css"] {
         font-family: 'IBM Plex Sans', sans-serif;
+        background-color: #0B1220;
+        color: #E2E8F0;
     }
 
     /* Remove padding padrão do Streamlit */
@@ -334,50 +335,16 @@ CUSTOM_CSS = """
 """
 
 # ---------------------------------------------------------------------------
-# PLOTLY THEME
+# ALTAIR THEME & COLORS
 # ---------------------------------------------------------------------------
-
-PLOTLY_LAYOUT = dict(
-    font=dict(family="IBM Plex Sans, sans-serif", color="#94A3B8", size=12),
-    paper_bgcolor="rgba(0,0,0,0)",
-    plot_bgcolor="rgba(0,0,0,0)",
-    margin=dict(l=10, r=10, t=40, b=10),
-    colorway=["#6366F1", "#8B5CF6", "#06B6D4", "#10B981", "#F59E0B", "#EF4444", "#EC4899"],
-    xaxis=dict(
-        gridcolor="#1E293B",
-        linecolor="#334155",
-        tickcolor="#334155",
-        tickfont=dict(color="#64748B", size=11),
-        title_font=dict(color="#94A3B8"),
-    ),
-    yaxis=dict(
-        gridcolor="#1E293B",
-        linecolor="#334155",
-        tickcolor="#334155",
-        tickfont=dict(color="#64748B", size=11),
-        title_font=dict(color="#94A3B8"),
-    ),
-    legend=dict(
-        bgcolor="rgba(0,0,0,0)",
-        font=dict(color="#94A3B8", size=11),
-    ),
-    hoverlabel=dict(
-        bgcolor="#1E293B",
-        bordercolor="#334155",
-        font_color="#E2E8F0",
-        font_size=12,
-    ),
-)
 
 COLOR_PALETTE = [
     "#6366F1", "#8B5CF6", "#06B6D4", "#10B981",
     "#F59E0B", "#EF4444", "#EC4899", "#0EA5E9",
 ]
 
-
-def apply_theme(fig: go.Figure) -> go.Figure:
-    fig.update_layout(**PLOTLY_LAYOUT)
-    return fig
+# Configurar tema dark para Altair
+alt.themes.enable("dark")
 
 
 # ---------------------------------------------------------------------------
@@ -415,60 +382,36 @@ def render_chart_header(title: str, subtitle: str = ""):
 def render_type_badge(var_type: str) -> str:
     color = get_type_color(var_type)
     label = get_type_label(var_type)
+    r, g, b = int(color[1:3], 16), int(color[3:5], 16), int(color[5:7], 16)
     return (
         f'<span class="type-badge" '
-        f'style="background:rgba({_hex_to_rgb(color)},0.12);'
-        f'color:{color};border:1px solid rgba({_hex_to_rgb(color)},0.3);">'
+        f'style="background:rgba({r},{g},{b},0.12);'
+        f'color:{color};border:1px solid rgba({r},{g},{b},0.3);">'
         f'{label}</span>'
     )
 
 
-def _hex_to_rgb(hex_color: str) -> str:
-    h = hex_color.lstrip("#")
-    r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
-    return f"{r},{g},{b}"
-
-
 # ---------------------------------------------------------------------------
-# GRÁFICOS
+# GRÁFICOS COM ALTAIR
 # ---------------------------------------------------------------------------
 
-def plot_bar(df: pd.DataFrame, col: str) -> go.Figure:
-    counts = df[col].value_counts().reset_index()
+def plot_bar(df: pd.DataFrame, col: str) -> alt.Chart:
+    counts = df[col].fillna("(nulo)").astype(str).value_counts().reset_index()
     counts.columns = [col, "Contagem"]
     counts = counts.sort_values("Contagem", ascending=True).tail(20)
 
-    fig = go.Figure(
-        go.Bar(
-            x=counts["Contagem"],
-            y=counts[col].astype(str),
-            orientation="h",
-            marker=dict(
-                color=counts["Contagem"],
-                colorscale=[[0, "#334155"], [1, "#6366F1"]],
-                showscale=False,
-            ),
-            text=counts["Contagem"],
-            textposition="outside",
-        )
-    )
-
-    layout = PLOTLY_LAYOUT.copy()
-    layout["yaxis"] = {
-        **layout.get("yaxis", {}),
-        "categoryorder": "total ascending"
-    }
-
-    fig.update_layout(
-        **layout,
-        height=max(300, len(counts) * 36),
-    )
-
-    return fig
+    return alt.Chart(counts).mark_bar(color="#6366F1", opacity=0.85).encode(
+        x=alt.X("Contagem:Q", title="Contagem"),
+        y=alt.Y(f"{col}:N", title=col, sort="-x"),
+        tooltip=[alt.Tooltip(f"{col}:N"), alt.Tooltip("Contagem:Q")],
+    ).properties(
+        height=max(300, len(counts) * 35),
+        width="container"
+    ).interactive()
 
 
-def plot_pie(df: pd.DataFrame, col: str) -> go.Figure:
-    counts = df[col].value_counts().reset_index()
+def plot_pie(df: pd.DataFrame, col: str) -> alt.Chart:
+    counts = df[col].fillna("(nulo)").astype(str).value_counts().reset_index()
     counts.columns = [col, "Contagem"]
     top = counts.head(8)
     if len(counts) > 8:
@@ -476,78 +419,64 @@ def plot_pie(df: pd.DataFrame, col: str) -> go.Figure:
             [{col: "Outros", "Contagem": counts.iloc[8:]["Contagem"].sum()}]
         )
         top = pd.concat([top, outros], ignore_index=True)
-
-    fig = go.Figure(
-        go.Pie(
-            labels=top[col].astype(str),
-            values=top["Contagem"],
-            hole=0.45,
-            marker=dict(colors=COLOR_PALETTE, line=dict(color="#0F172A", width=2)),
-            textfont=dict(color="#E2E8F0", size=11),
-        )
+    
+    return alt.Chart(top).encode(
+        theta=alt.Theta("Contagem:Q"),
+        color=alt.Color(f"{col}:N", scale=alt.Scale(range=COLOR_PALETTE)),
+        tooltip=[alt.Tooltip(f"{col}:N"), alt.Tooltip("Contagem:Q")],
+    ).mark_arc(innerRadius=60, opacity=0.85).properties(
+        height=380,
+        width="container",
     )
-    fig.update_layout(**PLOTLY_LAYOUT, height=380)
-    return fig
 
 
-def plot_histogram(df: pd.DataFrame, col: str) -> go.Figure:
+def plot_histogram(df: pd.DataFrame, col: str) -> alt.Chart:
     series = df[col].dropna()
+    if series.empty:
+        return alt.Chart(pd.DataFrame({col: [], "count": []})).mark_bar().encode()
+
     nbins = min(40, max(10, int(np.sqrt(len(series)))))
+    data = pd.DataFrame({col: series})
 
-    fig = go.Figure(
-        go.Histogram(
-            x=series,
-            nbinsx=nbins,
-            marker=dict(
-                color="#6366F1",
-                opacity=0.85,
-                line=dict(color="#0F172A", width=0.5),
-            ),
-        )
-    )
-    fig.update_layout(
-        **PLOTLY_LAYOUT,
+    return alt.Chart(data).mark_bar(color="#6366F1", opacity=0.85).encode(
+        x=alt.X(f"{col}:Q", bin=alt.Bin(maxbins=nbins), title=col),
+        y=alt.Y("count():Q", title="Frequência"),
+        tooltip=[alt.Tooltip(f"{col}:Q", format=".2f"), "count()"],
+    ).properties(
         height=340,
-        bargap=0.05,
-        xaxis_title=col,
-        yaxis_title="Frequencia",
-    )
-    return fig
+        width="container"
+    ).interactive()
 
 
-def plot_boxplot(df: pd.DataFrame, col: str, group_col: str = None) -> go.Figure:
+def plot_boxplot(df: pd.DataFrame, col: str, group_col: str = None) -> alt.Chart:
     if group_col and group_col != col:
         groups = df[group_col].value_counts().head(8).index.tolist()
-        fig = go.Figure()
-        for i, grp in enumerate(groups):
-            subset = df[df[group_col] == grp][col].dropna()
-            fig.add_trace(
-                go.Box(
-                    y=subset,
-                    name=str(grp),
-                    marker_color=COLOR_PALETTE[i % len(COLOR_PALETTE)],
-                    line_color=COLOR_PALETTE[i % len(COLOR_PALETTE)],
-                    fillcolor=f"rgba({_hex_to_rgb(COLOR_PALETTE[i % len(COLOR_PALETTE)])},0.2)",
-                )
-            )
-        fig.update_layout(**PLOTLY_LAYOUT, height=380, yaxis_title=col)
+        data = df[df[group_col].isin(groups)].dropna(subset=[col])
+        data[group_col] = data[group_col].astype(str)
+
+        return alt.Chart(data).mark_boxplot(opacity=0.7, size=40).encode(
+            x=alt.X(f"{group_col}:N", title=group_col),
+            y=alt.Y(f"{col}:Q", title=col),
+            color=alt.Color(f"{group_col}:N", scale=alt.Scale(range=COLOR_PALETTE), legend=None),
+            tooltip=[alt.Tooltip(f"{group_col}:N"), alt.Tooltip(f"{col}:Q", format=".2f")],
+        ).properties(
+            height=380,
+            width="container"
+        ).interactive()
     else:
         series = df[col].dropna()
-        fig = go.Figure(
-            go.Box(
-                y=series,
-                marker_color="#6366F1",
-                line_color="#6366F1",
-                fillcolor="rgba(99,102,241,0.15)",
-                boxpoints="outliers",
-                pointpos=0,
-            )
-        )
-        fig.update_layout(**PLOTLY_LAYOUT, height=340, yaxis_title=col)
-    return fig
+        data = pd.DataFrame({col: series})
+
+        return alt.Chart(data).mark_boxplot(opacity=0.85, color="#6366F1", size=40).encode(
+            y=alt.Y(f"{col}:Q", title=col),
+            tooltip=[alt.Tooltip(f"{col}:Q", format=".2f")],
+        ).properties(
+            height=340,
+            width="container"
+        ).interactive()
 
 
-def plot_grouped_bar(df: pd.DataFrame, cat_col: str, num_col: str) -> go.Figure:
+def plot_grouped_bar(df: pd.DataFrame, cat_col: str, num_col: str) -> alt.Chart:
     agg = (
         df.groupby(cat_col)[num_col]
         .mean()
@@ -555,53 +484,38 @@ def plot_grouped_bar(df: pd.DataFrame, cat_col: str, num_col: str) -> go.Figure:
         .sort_values(num_col, ascending=False)
         .head(15)
     )
-    fig = go.Figure(
-        go.Bar(
-            x=agg[cat_col].astype(str),
-            y=agg[num_col],
-            marker=dict(
-                color=agg[num_col],
-                colorscale=[[0, "#334155"], [1, "#6366F1"]],
-                showscale=False,
-                line=dict(color="#0F172A", width=0.5),
-            ),
-            text=agg[num_col].round(2),
-            textposition="outside",
-            textfont=dict(color="#94A3B8", size=10),
-        )
-    )
-    fig.update_layout(
-        **PLOTLY_LAYOUT,
+    agg[cat_col] = agg[cat_col].astype(str)
+
+    return alt.Chart(agg).mark_bar(color="#6366F1", opacity=0.85).encode(
+        x=alt.X(f"{cat_col}:N", title=cat_col, sort="-y"),
+        y=alt.Y(f"{num_col}:Q", title=f"Média de {num_col}"),
+        tooltip=[alt.Tooltip(f"{cat_col}:N"), alt.Tooltip(f"{num_col}:Q", format=".2f")],
+    ).properties(
         height=360,
-        xaxis_title=cat_col,
-        yaxis_title=f"Media de {num_col}",
-    )
-    return fig
+        width="container"
+    ).interactive()
 
 
-def plot_correlation_heatmap(df: pd.DataFrame, num_cols: list) -> go.Figure:
+def plot_correlation_heatmap(df: pd.DataFrame, num_cols: list) -> alt.Chart:
     if len(num_cols) < 2:
         return None
-    corr = df[num_cols].corr()
-    fig = go.Figure(
-        go.Heatmap(
-            z=corr.values,
-            x=corr.columns.tolist(),
-            y=corr.index.tolist(),
-            colorscale=[
-                [0, "#0EA5E9"], [0.5, "#1E293B"], [1, "#6366F1"]
-            ],
-            zmin=-1, zmax=1,
-            text=corr.round(2).values,
-            texttemplate="%{text}",
-            textfont=dict(size=10, color="#E2E8F0"),
-        )
-    )
-    fig.update_layout(
-        **PLOTLY_LAYOUT,
+
+    corr = df[num_cols].corr().reset_index().melt(id_vars="index")
+    corr.columns = ["Variável A", "Variável B", "Correlação"]
+
+    return alt.Chart(corr).mark_rect(opacity=0.9).encode(
+        x=alt.X("Variável B:N", title=""),
+        y=alt.Y("Variável A:N", title=""),
+        color=alt.Color(
+            "Correlação:Q",
+            scale=alt.Scale(scheme="redblue"),
+            title="Correlação"
+        ),
+        tooltip=[alt.Tooltip("Variável A:N"), alt.Tooltip("Variável B:N"), alt.Tooltip("Correlação:Q", format=".3f")],
+    ).properties(
         height=max(300, len(num_cols) * 50),
+        width=max(300, len(num_cols) * 50),
     )
-    return fig
 
 
 # ---------------------------------------------------------------------------
@@ -627,7 +541,7 @@ def build_sidebar(df: pd.DataFrame, classification: dict) -> pd.DataFrame:
         ]
 
         if cat_cols:
-            st.markdown('<p class="sidebar-section-label">Variaveis Categoricas</p>', unsafe_allow_html=True)
+            st.markdown('<p class="sidebar-section-label">Variáveis Categóricas</p>', unsafe_allow_html=True)
             for col in cat_cols[:4]:
                 options = sorted(df[col].dropna().unique().tolist(), key=str)
                 selected = st.multiselect(
@@ -640,7 +554,7 @@ def build_sidebar(df: pd.DataFrame, classification: dict) -> pd.DataFrame:
                     df_filtered = df_filtered[df_filtered[col].isin(selected)]
 
         if num_cols:
-            st.markdown('<p class="sidebar-section-label">Variaveis Numericas</p>', unsafe_allow_html=True)
+            st.markdown('<p class="sidebar-section-label">Variáveis Numéricas</p>', unsafe_allow_html=True)
             for col in num_cols[:3]:
                 col_data = df_filtered[col].dropna()
                 if col_data.empty:
@@ -692,16 +606,16 @@ def render_visualizations(df: pd.DataFrame, classification: dict):
         if t in ("numeric_continuous", "numeric_discrete")
     ]
 
-    tab_labels = ["Categoricas", "Numericas", "Comparacoes", "Correlacao"]
+    tab_labels = ["Categóricas", "Numéricas", "Comparações", "Correlação"]
     tabs = st.tabs(tab_labels)
 
     # ---- TAB 1: Categóricas ----
     with tabs[0]:
         if not cat_cols:
-            st.markdown('<div class="info-box">Nenhuma variavel categorica encontrada no dataset.</div>', unsafe_allow_html=True)
+            st.markdown('<div class="info-box">Nenhuma variável categórica encontrada no conjunto de dados.</div>', unsafe_allow_html=True)
         else:
             selected_cat = st.selectbox(
-                "Selecionar variavel",
+                "Selecionar variável",
                 cat_cols,
                 key="cat_select",
             )
@@ -709,33 +623,31 @@ def render_visualizations(df: pd.DataFrame, classification: dict):
             with col_a:
                 with st.container():
                     render_chart_header(
-                        f"Distribuicao de {selected_cat}",
-                        "Frequencia absoluta por categoria",
+                        f"Distribuição de {selected_cat}",
+                        "Frequência absoluta por categoria",
                     )
-                    st.plotly_chart(
+                    st.altair_chart(
                         plot_bar(df, selected_cat),
                         use_container_width=True,
-                        config={"displayModeBar": False},
                     )
             with col_b:
                 with st.container():
                     render_chart_header(
-                        f"Proporcao de {selected_cat}",
-                        "Participacao relativa de cada categoria",
+                        f"Proporção de {selected_cat}",
+                        "Participação relativa de cada categoria",
                     )
-                    st.plotly_chart(
+                    st.altair_chart(
                         plot_pie(df, selected_cat),
                         use_container_width=True,
-                        config={"displayModeBar": False},
                     )
 
     # ---- TAB 2: Numéricas ----
     with tabs[1]:
         if not num_cols:
-            st.markdown('<div class="info-box">Nenhuma variavel numerica encontrada no dataset.</div>', unsafe_allow_html=True)
+            st.markdown('<div class="info-box">Nenhuma variável numérica encontrada no conjunto de dados.</div>', unsafe_allow_html=True)
         else:
             selected_num = st.selectbox(
-                "Selecionar variavel",
+                "Selecionar variável",
                 num_cols,
                 key="num_select",
             )
@@ -743,22 +655,20 @@ def render_visualizations(df: pd.DataFrame, classification: dict):
             with col_a:
                 render_chart_header(
                     f"Histograma — {selected_num}",
-                    "Distribuicao de frequencias",
+                    "Distribuição de frequências",
                 )
-                st.plotly_chart(
+                st.altair_chart(
                     plot_histogram(df, selected_num),
                     use_container_width=True,
-                    config={"displayModeBar": False},
                 )
             with col_b:
                 render_chart_header(
                     f"Boxplot — {selected_num}",
                     "Mediana, quartis e valores atipicos",
                 )
-                st.plotly_chart(
+                st.altair_chart(
                     plot_boxplot(df, selected_num),
                     use_container_width=True,
-                    config={"displayModeBar": False},
                 )
 
             # Estatísticas descritivas
@@ -784,53 +694,50 @@ def render_visualizations(df: pd.DataFrame, classification: dict):
     with tabs[2]:
         if not cat_cols or not num_cols:
             st.markdown(
-                '<div class="info-box">E necessario ter pelo menos uma variavel categorica e uma numerica para comparacoes.</div>',
+                '<div class="info-box">É necessário ter pelo menos uma variável categórica e uma variável numérica para comparações.</div>',
                 unsafe_allow_html=True,
             )
         else:
             col_a, col_b = st.columns(2)
             with col_a:
-                group_col = st.selectbox("Variavel de agrupamento (categorica)", cat_cols, key="grp_cat")
+                group_col = st.selectbox("Variável de agrupamento (categórica)", cat_cols, key="grp_cat")
             with col_b:
-                value_col = st.selectbox("Variavel de valor (numerica)", num_cols, key="grp_num")
+                value_col = st.selectbox("Variável de valor (numérica)", num_cols, key="grp_num")
 
             col_c, col_d = st.columns(2)
             with col_c:
                 render_chart_header(
-                    f"Media de {value_col} por {group_col}",
+                    f"Média de {value_col} por {group_col}",
                     "Agrupamento por categoria",
                 )
-                st.plotly_chart(
+                st.altair_chart(
                     plot_grouped_bar(df, group_col, value_col),
                     use_container_width=True,
-                    config={"displayModeBar": False},
                 )
             with col_d:
                 render_chart_header(
                     f"Boxplot de {value_col} por {group_col}",
-                    "Dispersao por categoria",
+                    "Dispersão por categoria",
                 )
-                st.plotly_chart(
+                st.altair_chart(
                     plot_boxplot(df, value_col, group_col),
                     use_container_width=True,
-                    config={"displayModeBar": False},
                 )
 
     # ---- TAB 4: Correlação ----
     with tabs[3]:
         if len(num_cols) < 2:
-            st.markdown('<div class="info-box">Sao necessarias pelo menos 2 variaveis numericas para calcular correlacoes.</div>', unsafe_allow_html=True)
+            st.markdown('<div class="info-box">São necessárias ao menos duas variáveis numéricas para calcular correlações.</div>', unsafe_allow_html=True)
         else:
             heatmap = plot_correlation_heatmap(df, num_cols)
             if heatmap:
                 render_chart_header(
-                    "Mapa de Correlacao",
-                    "Coeficiente de Pearson entre variaveis numericas (-1 a +1)",
+                    "Mapa de Correlação",
+                    "Coeficiente de Pearson entre variáveis numéricas (-1 a +1)",
                 )
-                st.plotly_chart(
+                st.altair_chart(
                     heatmap,
                     use_container_width=True,
-                    config={"displayModeBar": False},
                 )
 
                 # Interpretação
@@ -839,13 +746,13 @@ def render_visualizations(df: pd.DataFrame, classification: dict):
                 for i in range(len(num_cols)):
                     for j in range(i + 1, len(num_cols)):
                         pairs.append({
-                            "Variavel A": num_cols[i],
-                            "Variavel B": num_cols[j],
-                            "Correlacao": round(corr_matrix.iloc[i, j], 4),
+                            "Variável A": num_cols[i],
+                            "Variável B": num_cols[j],
+                            "Correlação": round(corr_matrix.iloc[i, j], 4),
                         })
                 if pairs:
                     corr_df = pd.DataFrame(pairs).sort_values(
-                        "Correlacao", key=abs, ascending=False
+                        "Correlação", key=abs, ascending=False
                     )
                     st.dataframe(
                         corr_df,
@@ -855,14 +762,14 @@ def render_visualizations(df: pd.DataFrame, classification: dict):
 
 
 # ---------------------------------------------------------------------------
-# SECAO: INSIGHTS
+# SEÇÃO: INSIGHTS
 # ---------------------------------------------------------------------------
 
 def render_insights(df: pd.DataFrame, classification: dict):
     insights = generate_insights(df, classification)
 
     if not insights:
-        st.markdown('<div class="info-box">Nao foi possivel gerar insights automaticos com os dados atuais.</div>', unsafe_allow_html=True)
+        st.markdown('<div class="info-box">Não foi possível gerar insights automáticos com os dados atuais.</div>', unsafe_allow_html=True)
         return
 
     cols_per_row = 3
@@ -886,7 +793,7 @@ def render_insights(df: pd.DataFrame, classification: dict):
 
 
 # ---------------------------------------------------------------------------
-# SECAO: METODOLOGIA
+# SEÇÃO: METODOLOGIA
 # ---------------------------------------------------------------------------
 
 def render_methodology(df: pd.DataFrame, classification: dict):
@@ -910,9 +817,9 @@ def render_methodology(df: pd.DataFrame, classification: dict):
         <table class="methodology-table">
             <thead>
                 <tr>
-                    <th>Variavel</th>
+                    <th>Variável</th>
                     <th>Tipo Classificado</th>
-                    <th style="text-align:center;">Valores Unicos</th>
+                    <th style="text-align:center;">Valores Únicos</th>
                     <th style="text-align:center;">Completude</th>
                 </tr>
             </thead>
@@ -939,23 +846,23 @@ def main():
     if raw_df.empty:
         st.markdown(
             '<div class="warning-box">'
-            'Nao foi possivel carregar os dados da API. '
-            'Veja o diagnostico abaixo.'
+            'Não foi possível carregar os dados da API. '
+            'Veja o diagnóstico abaixo.'
             '</div>',
             unsafe_allow_html=True,
         )
-        with st.expander("Diagnostico da conexao", expanded=True):
+        with st.expander("Diagnóstico da conexão", expanded=True):
             from utils import CSV_EXPORT_URL, SHEET_ID, SHEET_GID
 
-            st.markdown(f"**URL de exportacao CSV:**")
+            st.markdown(f"**URL de exportação CSV:**")
             st.code(CSV_EXPORT_URL, language="text")
             st.markdown(
                 """
-                **Possiveis causas do erro:**
-                - A planilha nao esta compartilhada publicamente
+                **Possíveis causas do erro:**
+                - A planilha não está compartilhada publicamente
                   → No Google Sheets: *Compartilhar → Qualquer pessoa com o link → Leitor*
-                - O `gid` da aba esta incorreto
-                  → Abra a planilha no navegador e copie o numero apos `gid=` na URL
+                - O `gid` da aba está incorreto
+                  → Abra a planilha no navegador e copie o número após `gid=` na URL
                 - Sem acesso a internet ou rede corporativa bloqueando `docs.google.com`
                   → Tente abrir a URL acima diretamente no navegador para verificar
                 """
@@ -979,13 +886,12 @@ def main():
     st.markdown(
         """
         <div class="main-header">
-            <div class="header-badge">Trabalho de Conclusao de Curso</div>
-            <h1>Dashboard de Analise de Dados</h1>
+            <div class="header-badge"><i class="bi bi-speedometer2"></i> Dashboard Analítico</div>
+            <h1>Painel de Análise de Dados</h1>
             <p>
-                Plataforma de analise exploratoria estruturada sobre dados coletados via Google Forms.
-                Os dados sao consumidos em tempo real por uma API construida com Google Apps Script
-                e processados com classificacao automatica de variaveis, visualizacoes interativas
-                e geracao de insights estatisticos.
+                Painel de análise exploratória com visualizações modernas e métricas automáticas.
+                Dados importados em tempo real a partir do Google Sheets, classificados e apresentados
+                com estatísticas claras, comparações e insights relevantes.
             </p>
         </div>
         """,
@@ -995,19 +901,19 @@ def main():
     # =========================================================================
     # KPIs
     # =========================================================================
-    render_section("Visao Geral do Dataset", "Metricas gerais extraidas do conjunto de dados atual")
+    render_section("Visão Geral do Conjunto de Dados", "Métricas gerais extraídas do conjunto de dados atual")
 
     k1, k2, k3, k4, k5 = st.columns(5)
     with k1:
         render_kpi_card("Registros Totais", f"{kpis['total_records']:,}", "respostas coletadas", "#6366F1")
     with k2:
-        render_kpi_card("Variaveis", f"{kpis['total_columns']}", "campos analisados", "#8B5CF6")
+        render_kpi_card("Variáveis", f"{kpis['total_columns']}", "campos analisados", "#8B5CF6")
     with k3:
-        render_kpi_card("Completude", f"{kpis['completeness']}%", "dados preenchidos", "#10B981")
+        render_kpi_card("Completude", f"{kpis['completeness']}%", "percentual de preenchimento", "#10B981")
     with k4:
-        render_kpi_card("Var. Numericas", f"{kpis['numeric_cols']}", "continuas + discretas", "#06B6D4")
+        render_kpi_card("Variáveis Numéricas", f"{kpis['numeric_cols']}", "contínuas + discretas", "#06B6D4")
     with k5:
-        render_kpi_card("Var. Categoricas", f"{kpis['categorical_cols']}", "nominais + ordinais", "#F59E0B")
+        render_kpi_card("Variáveis Categóricas", f"{kpis['categorical_cols']}", "nominais + ordinais", "#F59E0B")
 
     if len(df_filtered) < len(df):
         st.markdown("<br>", unsafe_allow_html=True)
@@ -1022,22 +928,22 @@ def main():
     # =========================================================================
     # METODOLOGIA
     # =========================================================================
-    with st.expander("Metodologia — Classificacao de Variaveis", expanded=False):
+    with st.expander("Metodologia — Classificação de Variáveis", expanded=False):
         render_section(
-            "Classificacao Automatica de Variaveis",
-            "Cada variavel foi classificada com base em tipo de dado e numero de valores unicos."
+            "Classificação Automática de Variáveis",
+            "Cada variável foi classificada com base em tipo de dado e número de valores únicos."
         )
         render_methodology(df, classification)
         st.markdown("<br>", unsafe_allow_html=True)
         st.markdown(
             """
             <div class="info-box">
-                <strong>Criterios de classificacao:</strong>
-                Numerica Continua (numerica com mais de 20 valores unicos) |
-                Numerica Discreta (numerica com ate 20 valores unicos) |
-                Categorica Nominal (string com ate 30 categorias, sem ordem) |
-                Categorica Ordinal (detectada por palavras-chave e padroes de escala) |
-                Texto Livre (media de palavras maior que 4 e muitos valores unicos) |
+                <strong>Critérios de classificação:</strong>
+                Numérica Contínua (numérica com mais de 20 valores únicos) |
+                Numérica Discreta (numérica com até 20 valores únicos) |
+                Categórica Nominal (texto com até 30 categorias, sem ordem) |
+                Categórica Ordinal (detecção por palavras-chave e padrões de escala) |
+                Texto Livre (média de palavras maior que 4 e muitos valores únicos) |
                 Data (reconhecimento de formatos de data).
             </div>
             """,
@@ -1050,8 +956,8 @@ def main():
     # VISUALIZACOES
     # =========================================================================
     render_section(
-        "Analise Exploratoria",
-        "Visualizacoes interativas segmentadas por tipo de variavel",
+        "Análise Exploratória",
+        "Visualizações interativas segmentadas por tipo de variável",
     )
     render_visualizations(df_filtered, classification)
 
@@ -1061,8 +967,8 @@ def main():
     # INSIGHTS AUTOMATICOS
     # =========================================================================
     render_section(
-        "Insights Automaticos",
-        "Padroes e estatisticas relevantes identificados no conjunto de dados filtrado",
+        "Insights Automáticos",
+        "Padrões e estatísticas relevantes identificados no conjunto de dados filtrado",
     )
     render_insights(df_filtered, classification)
 
@@ -1073,17 +979,10 @@ def main():
     # =========================================================================
     render_section(
         "Tabela de Dados",
-        f"Visualizacao dos registros filtrados — {len(df_filtered)} linhas x {len(df_filtered.columns)} colunas",
+        f"Visualização dos registros filtrados — {len(df_filtered)} linhas x {len(df_filtered.columns)} colunas",
     )
 
-    search_col, download_col = st.columns([3, 1])
-    with search_col:
-        search_term = st.text_input(
-            "Buscar na tabela",
-            placeholder="Digite para filtrar linhas...",
-            key="table_search",
-            label_visibility="collapsed",
-        )
+    _, download_col = st.columns([3, 1])
     with download_col:
         csv_data = df_filtered.to_csv(index=False).encode("utf-8")
         st.download_button(
@@ -1094,12 +993,15 @@ def main():
             use_container_width=True,
         )
 
-    display_df = df_filtered
-    if search_term:
-        mask = display_df.astype(str).apply(
-            lambda col: col.str.contains(search_term, case=False, na=False)
-        ).any(axis=1)
-        display_df = display_df[mask]
+    display_df = df_filtered.copy()
+
+    # Substituir DataHora numérico/nao-desejado por formato legível
+    if "DataHoraFormatado" in display_df.columns:
+        display_df = display_df.drop(columns=["DataHora"], errors="ignore")
+        display_df = display_df.rename(columns={"DataHoraFormatado": "HorarioDia"})
+
+    # Remover colunas duplicadas residuais para não quebrar o Streamlit
+    display_df = display_df.loc[:, ~display_df.columns.duplicated()]
 
     st.dataframe(
         display_df,
@@ -1114,9 +1016,8 @@ def main():
     st.markdown(
         """
         <div style="text-align:center;color:#334155;font-size:0.78rem;padding:1rem 0;border-top:1px solid #1E293B;">
-            Dashboard desenvolvido com Streamlit e Plotly &mdash;
-            Dados coletados via Google Forms &middot; API Google Apps Script &mdash;
-            Trabalho de Conclusao de Curso
+            Dashboard desenvolvido com Streamlit e Altair &mdash;
+            Dados coletados via Google Forms &middot; API Google Apps Script
         </div>
         """,
         unsafe_allow_html=True,

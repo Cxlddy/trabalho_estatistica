@@ -105,7 +105,40 @@ def clean_dataframe(df: pd.DataFrame) -> pd.DataFrame:
 
     df.columns = [str(c).strip() for c in df.columns]
 
+    # Renomear colunas de resposta do questionário para termos mais amigáveis
+    df.rename(columns={
+        "Carimbo de data/hora": "DataHora",
+        "Qual é a sua idade?": "Idade",
+        "Selecione sua série:": "Serie",
+        "Qual área acadêmica você se identifica mais?": "AreaIdentificacao",
+        "Você pretende fazer uma faculdade?": "PretendeFaculdade",
+        "Se sim, qual curso deseja fazer?": "CursoDesejado",
+        "Você sabe qual faculdade deseja ingressar?": "SabeFaculdade",
+        "Em qual área está seu curso?": "AreaCurso",
+        "Você se sente seguro em relação a sua escolha de curso/faculdade?": "SegurancaEscolha",
+    }, inplace=True)
+
+    # Formato adicional para DataHora: datetime + horÃ¡rio bonito
+    if "DataHora" in df.columns:
+        df["DataHora"] = pd.to_datetime(df["DataHora"], errors="coerce", dayfirst=True)
+        df["DataHora"] = df["DataHora"].dt.tz_localize(None)
+        # Evitar duplicação de colunas HorarioDia/DataHoraFormatado quando o df já tiver rodado
+        if "HorarioDia" in df.columns:
+            df.drop(columns=["HorarioDia"], inplace=True)
+        if "DataHoraFormatado" in df.columns:
+            df.drop(columns=["DataHoraFormatado"], inplace=True)
+        df["DataHoraFormatado"] = df["DataHora"].dt.strftime("%d/%m/%Y %H:%M")
+        df["HorarioDia"] = df["DataHora"].dt.strftime("%d/%m %H:%M")
+
+        # Se a data nÃ£o puder ser convertida, manter NaT e string nula
+        df.loc[df["DataHora"].isna(), "DataHoraFormatado"] = np.nan
+        df.loc[df["DataHora"].isna(), "HorarioDia"] = np.nan
+
     for col in df.columns:
+        # Evitar sobrescrever coluna de datetime durante limpeza de tipo
+        if pd.api.types.is_datetime64_any_dtype(df[col]):
+            continue
+
         if df[col].dtype == object:
             df[col] = df[col].apply(
                 lambda x: x.strip() if isinstance(x, str) else x
