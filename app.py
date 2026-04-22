@@ -1,12 +1,12 @@
 """
-app.py — Dashboard principal de análise de dados.
-Tecnologias: Streamlit, Altair, Pandas.
+app.py — Dashboard principal para análise de dados do TCC.
+Tecnologias: Streamlit, Plotly, Pandas.
 """
 
 import streamlit as st
 import pandas as pd
 import numpy as np
-import altair as alt
+import plotly.graph_objects as go
 
 from utils import (
     fetch_data,
@@ -18,1010 +18,1065 @@ from utils import (
     get_type_color,
 )
 
-# ---------------------------------------------------------------------------
+# ─────────────────────────────────────────────────────────────────────────────
 # CONFIGURAÇÃO DA PÁGINA
-# ---------------------------------------------------------------------------
+# ─────────────────────────────────────────────────────────────────────────────
 
 st.set_page_config(
-    page_title="Painel Analítico",
+    page_title="Dashboard TCC",
     page_icon=None,
     layout="wide",
     initial_sidebar_state="expanded",
 )
 
-# ---------------------------------------------------------------------------
-# CSS CUSTOMIZADO
-# ---------------------------------------------------------------------------
+# ─────────────────────────────────────────────────────────────────────────────
+# DESIGN SYSTEM
+# ─────────────────────────────────────────────────────────────────────────────
 
 CUSTOM_CSS = """
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
 <style>
-    /* Importar fonte */
-    @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 
-    /* Reset e base */
-    html, body, [class*="css"] {
-        font-family: 'IBM Plex Sans', sans-serif;
-        background-color: #0B1220;
-        color: #E2E8F0;
-    }
+*, *::before, *::after { box-sizing: border-box; }
+html, body, [class*="css"] { font-family: 'Inter', system-ui, sans-serif; }
 
-    /* Remove padding padrão do Streamlit */
-    .block-container {
-        padding-top: 1.5rem;
-        padding-bottom: 2rem;
-        padding-left: 2rem;
-        padding-right: 2rem;
-        max-width: 1400px;
-    }
+.block-container {
+    padding: 1.75rem 2.25rem 3rem 2.25rem !important;
+    max-width: 1440px !important;
+}
 
-    /* Sidebar */
-    [data-testid="stSidebar"] {
-        background-color: #1E293B;
-        border-right: 1px solid #334155;
-    }
-    [data-testid="stSidebar"] .block-container {
-        padding: 1.5rem 1rem;
-    }
+/* ── Sidebar shell ─────────────────────────────────────────────────────── */
+[data-testid="stSidebar"] {
+    background: #070E1A !important;
+    border-right: 1px solid rgba(255,255,255,0.05) !important;
+    min-width: 280px !important;
+}
+[data-testid="stSidebar"] > div:first-child { padding: 0 !important; }
+[data-testid="stSidebar"] section[data-testid="stSidebarContent"] {
+    padding: 0 !important; gap: 0 !important;
+}
 
-    /* Header da sidebar */
-    .sidebar-header {
-        padding: 0.75rem 0;
-        border-bottom: 1px solid #334155;
-        margin-bottom: 1.5rem;
-    }
-    .sidebar-header h2 {
-        color: #6366F1;
-        font-size: 0.9rem;
-        font-weight: 600;
-        letter-spacing: 0.1em;
-        text-transform: uppercase;
-        margin: 0;
-    }
+/* ── Sidebar: cabeçalho ────────────────────────────────────────────────── */
+.sb-head {
+    padding: 1.6rem 1.4rem 1.3rem;
+    background: linear-gradient(160deg, #0F172A 0%, #070E1A 100%);
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+    position: relative;
+}
+.sb-head::after {
+    content: '';
+    position: absolute;
+    inset: 0 0 auto 0;
+    height: 2px;
+    background: linear-gradient(90deg, #6366F1 0%, #818CF8 60%, transparent 100%);
+}
+.sb-head-eyebrow {
+    font-size: 0.58rem; font-weight: 700; letter-spacing: 0.2em;
+    text-transform: uppercase; color: #6366F1; margin-bottom: 0.45rem;
+}
+.sb-head-title {
+    font-size: 0.95rem; font-weight: 600; color: #F1F5F9;
+    margin: 0 0 0.3rem; letter-spacing: -0.01em;
+}
+.sb-head-sub { font-size: 0.72rem; color: #2D3F57; line-height: 1.5; margin: 0; }
 
-    /* Seção label na sidebar */
-    .sidebar-section-label {
-        color: #64748B;
-        font-size: 0.7rem;
-        font-weight: 600;
-        letter-spacing: 0.12em;
-        text-transform: uppercase;
-        margin: 1.25rem 0 0.5rem 0;
-    }
+/* ── Sidebar: corpo ────────────────────────────────────────────────────── */
+.sb-body { padding: 0.5rem 1.4rem 1.6rem; }
 
-    /* Cabeçalho principal */
-    .main-header {
-        background: linear-gradient(135deg, #1E293B 0%, #0F172A 100%);
-        border: 1px solid #334155;
-        border-radius: 12px;
-        padding: 2rem 2.5rem;
-        margin-bottom: 2rem;
-        position: relative;
-        overflow: hidden;
-    }
-    .main-header::before {
-        content: '';
-        position: absolute;
-        top: 0; left: 0; right: 0;
-        height: 3px;
-        background: linear-gradient(90deg, #6366F1, #8B5CF6, #06B6D4);
-    }
-    .main-header h1 {
-        color: #F1F5F9;
-        font-size: 1.75rem;
-        font-weight: 700;
-        margin: 0 0 0.5rem 0;
-        letter-spacing: -0.02em;
-    }
-    .main-header p {
-        color: #94A3B8;
-        font-size: 0.95rem;
-        margin: 0;
-        line-height: 1.6;
-    }
-    .header-badge {
-        display: inline-block;
-        background: rgba(99, 102, 241, 0.15);
-        border: 1px solid rgba(99, 102, 241, 0.3);
-        color: #6366F1;
-        font-size: 0.7rem;
-        font-weight: 600;
-        letter-spacing: 0.1em;
-        text-transform: uppercase;
-        padding: 0.25rem 0.75rem;
-        border-radius: 100px;
-        margin-bottom: 1rem;
-    }
+/* ── Sidebar: seção ────────────────────────────────────────────────────── */
+.sb-section {
+    display: flex; align-items: center; gap: 0.55rem;
+    margin: 1.4rem 0 0.7rem; padding-bottom: 0.45rem;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+.sb-dot { width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; }
+.sb-section-text {
+    font-size: 0.6rem; font-weight: 700; letter-spacing: 0.15em;
+    text-transform: uppercase; color: #2D3F57;
+}
 
-    /* KPI Cards */
-    .kpi-card {
-        background: #1E293B;
-        border: 1px solid #334155;
-        border-radius: 10px;
-        padding: 1.25rem 1.5rem;
-        position: relative;
-        overflow: hidden;
-        transition: border-color 0.2s;
-    }
-    .kpi-card:hover {
-        border-color: #6366F1;
-    }
-    .kpi-card .kpi-label {
-        color: #64748B;
-        font-size: 0.72rem;
-        font-weight: 600;
-        letter-spacing: 0.1em;
-        text-transform: uppercase;
-        margin-bottom: 0.5rem;
-    }
-    .kpi-card .kpi-value {
-        color: #F1F5F9;
-        font-size: 2rem;
-        font-weight: 700;
-        line-height: 1;
-        font-family: 'IBM Plex Mono', monospace;
-    }
-    .kpi-card .kpi-sub {
-        color: #64748B;
-        font-size: 0.78rem;
-        margin-top: 0.4rem;
-    }
-    .kpi-accent {
-        position: absolute;
-        bottom: 0; left: 0;
-        height: 3px;
-        width: 100%;
-    }
+/* ── Sidebar: slider label ─────────────────────────────────────────────── */
+.sb-sl-label {
+    font-size: 0.73rem; font-weight: 500; color: #3D526B;
+    margin-bottom: 0.15rem; display: block;
+}
 
-    /* Section titles */
-    .section-title {
-        color: #E2E8F0;
-        font-size: 1.05rem;
-        font-weight: 600;
-        margin: 0 0 0.25rem 0;
-        letter-spacing: -0.01em;
-    }
-    .section-subtitle {
-        color: #64748B;
-        font-size: 0.82rem;
-        margin: 0 0 1.25rem 0;
-    }
-    .section-divider {
-        border: none;
-        border-top: 1px solid #1E293B;
-        margin: 2rem 0;
-    }
+/* ── Sidebar: contador ─────────────────────────────────────────────────── */
+.sb-counter {
+    margin: 1.4rem 0 1rem;
+    background: rgba(255,255,255,0.02);
+    border: 1px solid rgba(255,255,255,0.05);
+    border-radius: 10px;
+    padding: 1rem 1.1rem 0.85rem;
+}
+.sb-counter-lbl {
+    font-size: 0.58rem; font-weight: 700; letter-spacing: 0.15em;
+    text-transform: uppercase; color: #2D3F57; margin-bottom: 0.5rem;
+}
+.sb-counter-row { display: flex; align-items: baseline; gap: 0.3rem; margin-bottom: 0.65rem; }
+.sb-val { font-family: 'JetBrains Mono',monospace; font-size: 1.65rem; font-weight: 500; color: #818CF8; line-height: 1; }
+.sb-of  { font-size: 0.72rem; color: #2D3F57; }
+.sb-pct { font-family: 'JetBrains Mono',monospace; font-size: 0.7rem; color: #3D526B; margin-left: auto; }
+.sb-track { height: 3px; background: rgba(255,255,255,0.05); border-radius: 100px; overflow: hidden; }
+.sb-fill  { height: 100%; border-radius: 100px; background: linear-gradient(90deg, #6366F1, #818CF8); }
 
-    /* Tabela de metodologia */
-    .methodology-table {
-        width: 100%;
-        border-collapse: collapse;
-        font-size: 0.85rem;
-    }
-    .methodology-table th {
-        background: #0F172A;
-        color: #64748B;
-        font-size: 0.7rem;
-        font-weight: 600;
-        letter-spacing: 0.08em;
-        text-transform: uppercase;
-        padding: 0.65rem 1rem;
-        text-align: left;
-        border-bottom: 1px solid #334155;
-    }
-    .methodology-table td {
-        padding: 0.6rem 1rem;
-        color: #CBD5E1;
-        border-bottom: 1px solid #1E293B;
-        vertical-align: middle;
-    }
-    .methodology-table tr:hover td {
-        background: rgba(99, 102, 241, 0.04);
-    }
-    .type-badge {
-        display: inline-block;
-        padding: 0.2rem 0.6rem;
-        border-radius: 4px;
-        font-size: 0.72rem;
-        font-weight: 500;
-        font-family: 'IBM Plex Mono', monospace;
-    }
+/* ── Sidebar: botão ────────────────────────────────────────────────────── */
+[data-testid="stSidebar"] .stButton > button {
+    width: 100% !important; background: transparent !important;
+    border: 1px solid rgba(255,255,255,0.07) !important; color: #2D3F57 !important;
+    font-size: 0.72rem !important; font-weight: 500 !important;
+    padding: 0.55rem 1rem !important; border-radius: 7px !important;
+    letter-spacing: 0.04em !important; transition: all 0.18s !important;
+}
+[data-testid="stSidebar"] .stButton > button:hover {
+    border-color: rgba(99,102,241,0.4) !important;
+    color: #818CF8 !important; background: rgba(99,102,241,0.06) !important;
+}
 
-    /* Insight cards */
-    .insight-card {
-        background: #1E293B;
-        border: 1px solid #334155;
-        border-radius: 8px;
-        padding: 1rem 1.25rem;
-        margin-bottom: 0.75rem;
-    }
-    .insight-card .insight-title {
-        color: #94A3B8;
-        font-size: 0.72rem;
-        font-weight: 600;
-        letter-spacing: 0.08em;
-        text-transform: uppercase;
-        margin-bottom: 0.3rem;
-    }
-    .insight-card .insight-value {
-        color: #F1F5F9;
-        font-size: 1.1rem;
-        font-weight: 600;
-        margin-bottom: 0.2rem;
-    }
-    .insight-card .insight-detail {
-        color: #64748B;
-        font-size: 0.78rem;
-    }
+/* ── Sidebar: inputs ───────────────────────────────────────────────────── */
+[data-testid="stSidebar"] label {
+    font-size: 0.73rem !important; font-weight: 500 !important; color: #3D526B !important;
+}
+[data-testid="stSidebar"] div[data-baseweb="select"] > div {
+    background: rgba(255,255,255,0.025) !important;
+    border-color: rgba(255,255,255,0.07) !important;
+    border-radius: 8px !important; font-size: 0.78rem !important;
+}
+[data-testid="stSidebar"] div[data-baseweb="select"] > div:focus-within {
+    border-color: rgba(99,102,241,0.45) !important;
+    box-shadow: 0 0 0 2px rgba(99,102,241,0.1) !important;
+}
+[data-testid="stSidebar"] .stSlider > div > div > div { background: rgba(99,102,241,0.2) !important; }
+[data-testid="stSidebar"] .stSlider > div > div > div > div { background: #6366F1 !important; }
 
-    /* Chart containers */
-    .chart-container {
-        background: #1E293B;
-        border: 1px solid #334155;
-        border-radius: 10px;
-        padding: 1.25rem;
-        margin-bottom: 1.25rem;
-    }
-    .chart-title {
-        color: #CBD5E1;
-        font-size: 0.88rem;
-        font-weight: 600;
-        margin-bottom: 0.15rem;
-    }
-    .chart-subtitle {
-        color: #64748B;
-        font-size: 0.75rem;
-        margin-bottom: 1rem;
-    }
+/* ── Header principal ──────────────────────────────────────────────────── */
+.dash-header {
+    background: linear-gradient(140deg, #0F172A 0%, #070E1A 100%);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 14px; padding: 2.2rem 2.8rem;
+    margin-bottom: 2rem; position: relative; overflow: hidden;
+}
+.dash-header::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+    background: linear-gradient(90deg, #6366F1 0%, #8B5CF6 50%, #06B6D4 100%);
+}
+.dash-header::after {
+    content: ''; position: absolute; top: -80px; right: -80px;
+    width: 280px; height: 280px;
+    background: radial-gradient(circle, rgba(99,102,241,0.07) 0%, transparent 70%);
+    pointer-events: none;
+}
+.dash-eyebrow {
+    display: inline-flex; align-items: center; gap: 0.5rem;
+    font-size: 0.6rem; font-weight: 700; letter-spacing: 0.18em;
+    text-transform: uppercase; color: #6366F1;
+    background: rgba(99,102,241,0.08); border: 1px solid rgba(99,102,241,0.18);
+    padding: 0.28rem 0.8rem; border-radius: 100px; margin-bottom: 1rem;
+}
+.dash-pulse { width: 5px; height: 5px; border-radius: 50%; background: #6366F1; animation: dpulse 2s ease infinite; }
+@keyframes dpulse { 0%,100% { opacity:1; transform:scale(1); } 50% { opacity:.35; transform:scale(.65); } }
+.dash-title { font-size: 1.8rem; font-weight: 700; color: #F8FAFC; margin: 0 0 0.55rem; letter-spacing: -0.025em; line-height: 1.15; }
+.dash-desc  { font-size: 0.875rem; color: #3D526B; line-height: 1.65; max-width: 680px; margin: 0; }
 
-    /* Streamlit widget overrides */
-    .stSelectbox label, .stMultiSelect label {
-        color: #94A3B8 !important;
-        font-size: 0.78rem !important;
-        font-weight: 500 !important;
-    }
-    div[data-baseweb="select"] > div {
-        background-color: #0F172A !important;
-        border-color: #334155 !important;
-    }
-    .stDataFrame {
-        border-radius: 8px;
-        overflow: hidden;
-    }
+/* ── KPI Cards ─────────────────────────────────────────────────────────── */
+.kpi-card {
+    background: #0B1422; border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 12px; padding: 1.2rem 1.4rem 1.3rem;
+    transition: border-color .2s, transform .2s; cursor: default;
+}
+.kpi-card:hover { border-color: rgba(99,102,241,0.3); transform: translateY(-1px); }
+.kpi-lbl { font-size: 0.6rem; font-weight: 700; letter-spacing: 0.15em; text-transform: uppercase; color: #1E3352; margin-bottom: 0.55rem; }
+.kpi-val { font-family: 'JetBrains Mono',monospace; font-size: 1.9rem; font-weight: 500; line-height: 1; margin-bottom: 0.3rem; }
+.kpi-sub { font-size: 0.68rem; color: #1E3352; }
 
-    /* Tab styling */
-    .stTabs [data-baseweb="tab-list"] {
-        background-color: #0F172A;
-        gap: 0;
-        border-bottom: 1px solid #334155;
-    }
-    .stTabs [data-baseweb="tab"] {
-        color: #64748B;
-        font-size: 0.82rem;
-        font-weight: 500;
-        padding: 0.6rem 1.25rem;
-    }
-    .stTabs [aria-selected="true"] {
-        color: #6366F1 !important;
-        border-bottom: 2px solid #6366F1 !important;
-    }
+/* ── Títulos de seção ──────────────────────────────────────────────────── */
+.sec-wrap { margin-bottom: 1.3rem; }
+.sec-title { font-size: 1rem; font-weight: 600; color: #E2E8F0; margin: 0 0 0.2rem; letter-spacing: -0.015em; }
+.sec-sub   { font-size: 0.77rem; color: #1E3352; margin: 0; }
 
-    /* Scrollbar */
-    ::-webkit-scrollbar { width: 6px; height: 6px; }
-    ::-webkit-scrollbar-track { background: #0F172A; }
-    ::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
-    ::-webkit-scrollbar-thumb:hover { background: #6366F1; }
+/* ── Filtros ativos ────────────────────────────────────────────────────── */
+.af-bar {
+    display: flex; align-items: center; gap: 0.55rem; flex-wrap: wrap;
+    padding: 0.65rem 1rem; background: rgba(99,102,241,0.04);
+    border: 1px solid rgba(99,102,241,0.12); border-radius: 9px; margin-bottom: 1.2rem;
+}
+.af-lbl { font-size: 0.6rem; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: #6366F1; }
+.af-pill {
+    font-size: 0.68rem; color: #818CF8; background: rgba(99,102,241,0.09);
+    border: 1px solid rgba(99,102,241,0.18); padding: 0.16rem 0.6rem;
+    border-radius: 100px; font-family: 'JetBrains Mono',monospace;
+}
 
-    /* Alert/Info boxes */
-    .info-box {
-        background: rgba(6, 182, 212, 0.08);
-        border: 1px solid rgba(6, 182, 212, 0.25);
-        border-radius: 8px;
-        padding: 1rem 1.25rem;
-        color: #67E8F9;
-        font-size: 0.85rem;
-        margin-bottom: 1rem;
-    }
-    .warning-box {
-        background: rgba(245, 158, 11, 0.08);
-        border: 1px solid rgba(245, 158, 11, 0.25);
-        border-radius: 8px;
-        padding: 1rem 1.25rem;
-        color: #FCD34D;
-        font-size: 0.85rem;
-        margin-bottom: 1rem;
-    }
+/* ── Abas ──────────────────────────────────────────────────────────────── */
+.stTabs [data-baseweb="tab-list"] {
+    background: transparent !important;
+    border-bottom: 1px solid rgba(255,255,255,0.05) !important;
+    gap: 0 !important; margin-bottom: 1.4rem !important;
+}
+.stTabs [data-baseweb="tab"] {
+    font-size: 0.78rem !important; font-weight: 500 !important;
+    color: #2D3F57 !important; padding: 0.65rem 1.25rem !important;
+    background: transparent !important; border-radius: 0 !important;
+    transition: color .15s !important;
+}
+.stTabs [data-baseweb="tab"]:hover { color: #64748B !important; }
+.stTabs [aria-selected="true"] { color: #818CF8 !important; border-bottom: 2px solid #6366F1 !important; }
+
+/* ── Chart wrap ────────────────────────────────────────────────────────── */
+.chart-wrap {
+    background: #070E1A; border: 1px solid rgba(255,255,255,0.05);
+    border-radius: 12px; padding: 1.3rem 1.4rem 0.4rem;
+}
+.chart-eyebrow { font-size: 0.58rem; font-weight: 700; letter-spacing: 0.15em; text-transform: uppercase; color: #1E3352; margin-bottom: 0.2rem; }
+.chart-title   { font-size: 0.88rem; font-weight: 600; color: #94A3B8; margin: 0 0 0.12rem; }
+.chart-sub     { font-size: 0.7rem; color: #1A2E44; margin: 0 0 0.15rem; }
+
+/* ── Insight cards ─────────────────────────────────────────────────────── */
+.ins-card {
+    background: #070E1A; border: 1px solid rgba(255,255,255,0.05);
+    border-radius: 11px; padding: 1.1rem 1.2rem 1rem;
+    position: relative; transition: border-color .2s;
+}
+.ins-card:hover { border-color: rgba(99,102,241,0.2); }
+.ins-accent { position: absolute; left:0; top:0; bottom:0; width:3px; border-radius:11px 0 0 11px; }
+.ins-lbl    { font-size: 0.57rem; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: #1A2E44; margin-bottom: 0.4rem; padding-left: 0.75rem; }
+.ins-val    { font-size: 1.12rem; font-weight: 600; color: #E2E8F0; margin-bottom: 0.28rem; padding-left: 0.75rem; word-break: break-word; }
+.ins-detail { font-size: 0.7rem; color: #2D3F57; line-height: 1.5; padding-left: 0.75rem; }
+
+/* ── Tabela metodologia ────────────────────────────────────────────────── */
+.meth-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+.meth-table th {
+    background: #040810; color: #1A2E44; font-size: 0.6rem; font-weight: 700;
+    letter-spacing: 0.12em; text-transform: uppercase;
+    padding: 0.72rem 1.1rem; text-align: left;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+.meth-table td { padding: 0.62rem 1.1rem; color: #64748B; border-bottom: 1px solid rgba(255,255,255,0.025); vertical-align: middle; }
+.meth-table tr:hover td { background: rgba(99,102,241,0.025); }
+.meth-table code {
+    font-family: 'JetBrains Mono',monospace; font-size: 0.75rem;
+    color: #818CF8; background: rgba(99,102,241,0.07);
+    padding: 0.1rem 0.45rem; border-radius: 4px;
+}
+.type-pill {
+    display: inline-block; font-size: 0.64rem; font-weight: 600;
+    font-family: 'JetBrains Mono',monospace;
+    padding: 0.22rem 0.65rem; border-radius: 100px; letter-spacing: 0.02em;
+}
+
+/* ── Divisor ───────────────────────────────────────────────────────────── */
+.divider { border: none; border-top: 1px solid rgba(255,255,255,0.04); margin: 2.2rem 0; }
+
+/* ── Caixas de alerta ──────────────────────────────────────────────────── */
+.info-box {
+    background: rgba(6,182,212,0.04); border: 1px solid rgba(6,182,212,0.13);
+    border-radius: 9px; padding: 0.9rem 1.2rem; color: #22D3EE; font-size: 0.81rem; line-height: 1.55;
+}
+.warn-box {
+    background: rgba(245,158,11,0.04); border: 1px solid rgba(245,158,11,0.15);
+    border-radius: 9px; padding: 0.9rem 1.2rem; color: #FCD34D; font-size: 0.81rem; line-height: 1.55;
+}
+
+/* ── Rodapé ────────────────────────────────────────────────────────────── */
+.dash-footer {
+    text-align: center; color: #1A2A3F; font-size: 0.7rem;
+    padding: 1.5rem 0 0.5rem; border-top: 1px solid rgba(255,255,255,0.03);
+    margin-top: 1rem; letter-spacing: 0.03em;
+}
+
+/* ── Dropdowns / selects ───────────────────────────────────────────────── */
+div[data-baseweb="select"] > div {
+    background: #0B1422 !important; border-color: rgba(255,255,255,0.08) !important;
+    border-radius: 8px !important; font-size: 0.8rem !important;
+}
+div[data-baseweb="select"] > div:focus-within {
+    border-color: rgba(99,102,241,0.4) !important;
+    box-shadow: 0 0 0 2px rgba(99,102,241,0.1) !important;
+}
+div[data-baseweb="menu"] {
+    background: #0F172A !important; border: 1px solid rgba(255,255,255,0.07) !important;
+    border-radius: 10px !important;
+}
+div[role="option"] { font-size: 0.79rem !important; }
+
+/* ── Expander ──────────────────────────────────────────────────────────── */
+[data-testid="stExpander"] {
+    border: 1px solid rgba(255,255,255,0.05) !important;
+    border-radius: 11px !important; background: #070E1A !important;
+}
+[data-testid="stExpander"] summary {
+    font-size: 0.82rem !important; font-weight: 500 !important;
+    color: #3D526B !important; padding: 0.9rem 1.1rem !important;
+}
+
+/* ── Scrollbar ─────────────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.06); border-radius: 10px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(99,102,241,0.35); }
+
+/* ── Dataframe ─────────────────────────────────────────────────────────── */
+[data-testid="stDataFrame"] { border-radius: 10px; overflow: hidden; }
+
+/* ── Spinner ───────────────────────────────────────────────────────────── */
+.stSpinner > div { border-top-color: #6366F1 !important; }
 </style>
 """
 
-# ---------------------------------------------------------------------------
-# ALTAIR THEME & COLORS
-# ---------------------------------------------------------------------------
+# ─────────────────────────────────────────────────────────────────────────────
+# PLOTLY THEME
+# ─────────────────────────────────────────────────────────────────────────────
 
-COLOR_PALETTE = [
-    "#6366F1", "#8B5CF6", "#06B6D4", "#10B981",
-    "#F59E0B", "#EF4444", "#EC4899", "#0EA5E9",
-]
+_F = "Inter, system-ui, sans-serif"
+_M = "JetBrains Mono, monospace"
 
-# Configurar tema dark para Altair
-alt.themes.enable("dark")
+PBASE = dict(
+    font=dict(family=_F, color="#3D526B", size=11),
+    paper_bgcolor="rgba(0,0,0,0)",
+    plot_bgcolor="rgba(0,0,0,0)",
+    margin=dict(l=8, r=8, t=36, b=8),
+    colorway=["#6366F1","#8B5CF6","#06B6D4","#10B981","#F59E0B","#EF4444","#EC4899","#0EA5E9"],
+    xaxis=dict(
+        gridcolor="rgba(255,255,255,0.03)", linecolor="rgba(255,255,255,0.05)",
+        tickfont=dict(color="#2D3F57", size=10, family=_M),
+        title_font=dict(color="#3D526B", size=11), zeroline=False,
+    ),
+    yaxis=dict(
+        gridcolor="rgba(255,255,255,0.03)", linecolor="rgba(255,255,255,0.05)",
+        tickfont=dict(color="#2D3F57", size=10, family=_M),
+        title_font=dict(color="#3D526B", size=11), zeroline=False,
+    ),
+    legend=dict(bgcolor="rgba(0,0,0,0)", font=dict(color="#3D526B", size=10), itemsizing="constant"),
+    hoverlabel=dict(
+        bgcolor="#0F172A", bordercolor="rgba(255,255,255,0.08)",
+        font_color="#CBD5E1", font_size=11, font_family=_F,
+    ),
+)
+
+PAL = ["#6366F1","#8B5CF6","#06B6D4","#10B981","#F59E0B","#EF4444","#EC4899","#0EA5E9"]
 
 
-# ---------------------------------------------------------------------------
-# COMPONENTES DE UI
-# ---------------------------------------------------------------------------
+def _rgb(h: str) -> str:
+    h = h.lstrip("#")
+    return f"{int(h[0:2],16)},{int(h[2:4],16)},{int(h[4:6],16)}"
 
-def render_kpi_card(label: str, value, sub: str = "", accent_color: str = "#6366F1"):
-    st.markdown(
-        f"""
-        <div class="kpi-card">
-            <div class="kpi-label">{label}</div>
-            <div class="kpi-value">{value}</div>
-            {"<div class='kpi-sub'>" + sub + "</div>" if sub else ""}
-            <div class="kpi-accent" style="background:{accent_color};"></div>
-        </div>
-        """,
-        unsafe_allow_html=True,
+
+def _cfg() -> dict:
+    return {
+        "displayModeBar": True, "displaylogo": False,
+        "modeBarButtonsToRemove": [
+            "zoom2d","pan2d","select2d","lasso2d","zoomIn2d","zoomOut2d",
+            "autoScale2d","resetScale2d","hoverClosestCartesian",
+            "hoverCompareCartesian","toggleSpikelines",
+        ],
+        "toImageButtonOptions": {"format": "png", "scale": 2},
+    }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# GRÁFICOS
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _empty(msg="Sem dados suficientes para exibir o gráfico.") -> go.Figure:
+    fig = go.Figure()
+    fig.add_annotation(
+        text=msg, x=0.5, y=0.5, showarrow=False,
+        font=dict(color="#2D3F57", size=12, family=_F),
+        xref="paper", yref="paper", align="center",
     )
+    fig.update_layout(**PBASE, height=260)
+    return fig
 
 
-def render_section(title: str, subtitle: str = ""):
-    st.markdown(f'<p class="section-title">{title}</p>', unsafe_allow_html=True)
-    if subtitle:
-        st.markdown(f'<p class="section-subtitle">{subtitle}</p>', unsafe_allow_html=True)
+def plot_bar(df: pd.DataFrame, col: str) -> go.Figure:
+    counts = df[col].value_counts().reset_index()
+    counts.columns = [col, "n"]
+    counts = counts.sort_values("n", ascending=True).tail(25)
+    if counts.empty:
+        return _empty()
 
+    max_n  = counts["n"].max()
+    # Evita divisão por zero quando há apenas 1 valor único
+    denom  = max_n if max_n > 0 else 1
+    colors = [f"rgba(99,102,241,{0.3 + 0.7*(v/denom):.2f})" for v in counts["n"]]
 
-def render_chart_header(title: str, subtitle: str = ""):
-    st.markdown(
-        f'<p class="chart-title">{title}</p>'
-        + (f'<p class="chart-subtitle">{subtitle}</p>' if subtitle else ""),
-        unsafe_allow_html=True,
+    # Altura mínima para não colapsar com poucos itens
+    bar_height = max(260, len(counts) * 44)
+
+    fig = go.Figure(go.Bar(
+        x=counts["n"], y=counts[col].astype(str),
+        orientation="h",
+        marker=dict(color=colors, line=dict(width=0)),
+        text=counts["n"], textposition="outside",
+        textfont=dict(color="#2D3F57", size=10, family=_M),
+        hovertemplate="<b>%{y}</b><br>Contagem: %{x}<extra></extra>",
+    ))
+    fig.update_layout(
+        **PBASE, height=bar_height,
+        yaxis=dict(**PBASE["yaxis"], categoryorder="total ascending"),
+        xaxis=dict(
+            **PBASE["xaxis"], showgrid=False,
+            # Margem mínima de 2 para não colapsar quando max_n == 1
+            range=[0, max(max_n * 1.3, 2)],
+        ),
+        bargap=0.3,
     )
+    return fig
 
 
-def render_type_badge(var_type: str) -> str:
-    color = get_type_color(var_type)
-    label = get_type_label(var_type)
-    r, g, b = int(color[1:3], 16), int(color[3:5], 16), int(color[5:7], 16)
-    return (
-        f'<span class="type-badge" '
-        f'style="background:rgba({r},{g},{b},0.12);'
-        f'color:{color};border:1px solid rgba({r},{g},{b},0.3);">'
-        f'{label}</span>'
-    )
+def plot_pie(df: pd.DataFrame, col: str) -> go.Figure:
+    counts = df[col].value_counts().reset_index()
+    counts.columns = [col, "n"]
+    if counts.empty:
+        return _empty()
 
-
-# ---------------------------------------------------------------------------
-# GRÁFICOS COM ALTAIR
-# ---------------------------------------------------------------------------
-
-def plot_bar(df: pd.DataFrame, col: str) -> alt.Chart:
-    counts = df[col].fillna("(nulo)").astype(str).value_counts().reset_index()
-    counts.columns = [col, "Contagem"]
-    counts = counts.sort_values("Contagem", ascending=True).tail(20)
-
-    return alt.Chart(counts).mark_bar(color="#6366F1", opacity=0.85).encode(
-        x=alt.X("Contagem:Q", title="Contagem"),
-        y=alt.Y(f"{col}:N", title=col, sort="-x"),
-        tooltip=[alt.Tooltip(f"{col}:N"), alt.Tooltip("Contagem:Q")],
-    ).properties(
-        height=max(300, len(counts) * 35),
-        width="container"
-    ).interactive()
-
-
-def plot_pie(df: pd.DataFrame, col: str) -> alt.Chart:
-    counts = df[col].fillna("(nulo)").astype(str).value_counts().reset_index()
-    counts.columns = [col, "Contagem"]
-    top = counts.head(8)
-    if len(counts) > 8:
-        outros = pd.DataFrame(
-            [{col: "Outros", "Contagem": counts.iloc[8:]["Contagem"].sum()}]
+    # Com apenas 1 categoria não há proporção — mostrar mensagem informativa
+    if len(counts) < 2:
+        return _empty(
+            f"Apenas uma categoria: <b>{counts.iloc[0][col]}</b><br>"
+            f"({int(counts.iloc[0]['n'])} registro(s)). "
+            "São necessárias pelo menos 2 categorias para o gráfico de proporção."
         )
-        top = pd.concat([top, outros], ignore_index=True)
-    
-    return alt.Chart(top).encode(
-        theta=alt.Theta("Contagem:Q"),
-        color=alt.Color(f"{col}:N", scale=alt.Scale(range=COLOR_PALETTE)),
-        tooltip=[alt.Tooltip(f"{col}:N"), alt.Tooltip("Contagem:Q")],
-    ).mark_arc(innerRadius=60, opacity=0.85).properties(
-        height=380,
-        width="container",
+
+    if len(counts) > 8:
+        top    = counts.head(7).copy()
+        outros = pd.DataFrame([{col: "Outros", "n": counts.iloc[7:]["n"].sum()}])
+        top    = pd.concat([top, outros], ignore_index=True)
+    else:
+        top = counts.copy()
+
+    total = int(top["n"].sum())
+
+    # Com 2–3 categorias, labels externas se sobrepõem — usar "inside" ou "none"
+    n_cats    = len(top)
+    text_pos  = "inside" if n_cats <= 3 else "outside"
+    text_info = "percent+label" if n_cats <= 3 else "label"
+
+    fig = go.Figure(go.Pie(
+        labels=top[col].astype(str), values=top["n"],
+        hole=0.54,
+        marker=dict(colors=PAL[:n_cats], line=dict(color="#070E1A", width=2)),
+        textposition=text_pos,
+        textinfo=text_info,
+        insidetextorientation="radial",
+        textfont=dict(size=10, color="#E2E8F0" if text_pos == "inside" else "#3D526B", family=_F),
+        hovertemplate="<b>%{label}</b><br>%{value} resposta(s) (%{percent})<extra></extra>",
+        sort=False,
+        automargin=True,
+    ))
+    fig.add_annotation(
+        text=f"<b>{total}</b><br><span style='font-size:9px;color:#2D3F57'>total</span>",
+        x=0.5, y=0.5, showarrow=False,
+        font=dict(size=14, color="#94A3B8", family=_F), align="center",
     )
+    fig.update_layout(**PBASE, height=340,
+                      legend=dict(**PBASE["legend"], orientation="v", x=1.02, y=0.5))
+    return fig
 
 
-def plot_histogram(df: pd.DataFrame, col: str) -> alt.Chart:
-    series = df[col].dropna()
-    if series.empty:
-        return alt.Chart(pd.DataFrame({col: [], "count": []})).mark_bar().encode()
+def plot_histogram(df: pd.DataFrame, col: str) -> go.Figure:
+    s = df[col].dropna()
+    if s.empty:
+        return _empty()
 
-    nbins = min(40, max(10, int(np.sqrt(len(series)))))
-    data = pd.DataFrame({col: series})
+    n = len(s)
 
-    return alt.Chart(data).mark_bar(color="#6366F1", opacity=0.85).encode(
-        x=alt.X(f"{col}:Q", bin=alt.Bin(maxbins=nbins), title=col),
-        y=alt.Y("count():Q", title="Frequência"),
-        tooltip=[alt.Tooltip(f"{col}:Q", format=".2f"), "count()"],
-    ).properties(
-        height=340,
-        width="container"
-    ).interactive()
+    # Com 1 único valor numérico, histograma não faz sentido — mostrar card simples
+    if n == 1 or s.nunique() == 1:
+        val = s.iloc[0]
+        return _empty(f"Apenas 1 valor registrado: <b>{val}</b><br>São necessários mais registros para o histograma.")
+
+    # Regra de Sturges com mínimo 2 e máximo 40 bins
+    nbins = max(2, min(40, int(np.ceil(np.log2(n) + 1))))
+
+    fig = go.Figure(go.Histogram(
+        x=s, nbinsx=nbins,
+        marker=dict(color="rgba(99,102,241,0.7)", line=dict(color="#070E1A", width=0.8)),
+        hovertemplate="Intervalo: %{x}<br>Frequência: %{y}<extra></extra>",
+    ))
+    fig.update_layout(**PBASE, height=300, bargap=0.04,
+                      xaxis_title=col, yaxis_title="Frequência")
+    return fig
 
 
-def plot_boxplot(df: pd.DataFrame, col: str, group_col: str = None) -> alt.Chart:
+def plot_boxplot(df: pd.DataFrame, col: str, group_col: str = None) -> go.Figure:
     if group_col and group_col != col:
         groups = df[group_col].value_counts().head(8).index.tolist()
-        data = df[df[group_col].isin(groups)].dropna(subset=[col])
-        data[group_col] = data[group_col].astype(str)
+        if not groups:
+            return _empty()
 
-        return alt.Chart(data).mark_boxplot(opacity=0.7, size=40).encode(
-            x=alt.X(f"{group_col}:N", title=group_col),
-            y=alt.Y(f"{col}:Q", title=col),
-            color=alt.Color(f"{group_col}:N", scale=alt.Scale(range=COLOR_PALETTE), legend=None),
-            tooltip=[alt.Tooltip(f"{group_col}:N"), alt.Tooltip(f"{col}:Q", format=".2f")],
-        ).properties(
-            height=380,
-            width="container"
-        ).interactive()
+        fig = go.Figure()
+        traces_added = 0
+        for i, grp in enumerate(groups):
+            sub = df[df[group_col] == grp][col].dropna()
+            if sub.empty:
+                continue
+            c   = PAL[i % len(PAL)]
+            # Com apenas 1 ponto, boxpoints="all" para mostrar o dado
+            pts = "all" if len(sub) <= 5 else "outliers"
+            fig.add_trace(go.Box(
+                y=sub, name=str(grp),
+                marker=dict(color=c, size=5, opacity=0.75),
+                line=dict(color=c, width=1.5),
+                fillcolor=f"rgba({_rgb(c)},0.12)",
+                boxpoints=pts, jitter=0.4,
+                hovertemplate=f"<b>{grp}</b><br>%{{y}}<extra></extra>",
+            ))
+            traces_added += 1
+
+        if traces_added == 0:
+            return _empty()
+
+        fig.update_layout(**PBASE, height=340, yaxis_title=col)
     else:
-        series = df[col].dropna()
-        data = pd.DataFrame({col: series})
+        s = df[col].dropna()
+        if s.empty:
+            return _empty()
 
-        return alt.Chart(data).mark_boxplot(opacity=0.85, color="#6366F1", size=40).encode(
-            y=alt.Y(f"{col}:Q", title=col),
-            tooltip=[alt.Tooltip(f"{col}:Q", format=".2f")],
-        ).properties(
-            height=340,
-            width="container"
-        ).interactive()
+        n   = len(s)
+        pts = "all" if n <= 10 else "outliers"
+
+        # Com apenas 1 ponto, Plotly não desenha caixa — mostrar scatter
+        if n == 1:
+            fig = go.Figure(go.Scatter(
+                x=[col], y=[s.iloc[0]],
+                mode="markers",
+                marker=dict(color="#6366F1", size=12, symbol="circle"),
+                hovertemplate=f"{col}: %{{y}}<extra></extra>",
+            ))
+            fig.update_layout(**PBASE, height=300, yaxis_title=col,
+                              xaxis=dict(**PBASE["xaxis"], showticklabels=False))
+            return fig
+
+        fig = go.Figure(go.Box(
+            y=s, marker=dict(color="#6366F1", size=5, opacity=0.7),
+            line=dict(color="#6366F1", width=1.5),
+            fillcolor="rgba(99,102,241,0.1)",
+            boxpoints=pts, jitter=0.35, name=col, showlegend=False,
+            hovertemplate="%{y}<extra></extra>",
+        ))
+        fig.update_layout(**PBASE, height=300, yaxis_title=col)
+    return fig
 
 
-def plot_grouped_bar(df: pd.DataFrame, cat_col: str, num_col: str) -> alt.Chart:
+def plot_grouped_bar(df: pd.DataFrame, cat_col: str, num_col: str) -> go.Figure:
     agg = (
-        df.groupby(cat_col)[num_col]
-        .mean()
-        .reset_index()
-        .sort_values(num_col, ascending=False)
-        .head(15)
+        df.groupby(cat_col, observed=True)[num_col]
+        .agg(["mean", "count"]).reset_index()
+        .rename(columns={"mean": "média", "count": "n"})
+        .sort_values("média", ascending=False).head(15)
     )
-    agg[cat_col] = agg[cat_col].astype(str)
+    if agg.empty or agg["n"].sum() == 0:
+        return _empty("Sem dados suficientes para o agrupamento.")
 
-    return alt.Chart(agg).mark_bar(color="#6366F1", opacity=0.85).encode(
-        x=alt.X(f"{cat_col}:N", title=cat_col, sort="-y"),
-        y=alt.Y(f"{num_col}:Q", title=f"Média de {num_col}"),
-        tooltip=[alt.Tooltip(f"{cat_col}:N"), alt.Tooltip(f"{num_col}:Q", format=".2f")],
-    ).properties(
-        height=360,
-        width="container"
-    ).interactive()
+    max_v  = agg["média"].max()
+    min_v  = agg["média"].min()
+    span   = max_v - min_v
+    # Normaliza entre min e max para suportar médias negativas sem divisão por zero
+    denom  = span if span > 0 else 1
+    colors = [
+        f"rgba(99,102,241,{0.3 + 0.7 * max(0.0, min(1.0, (v - min_v) / denom)):.2f})"
+        for v in agg["média"]
+    ]
+
+    # Com valores pequenos ou 1 barra, "outside" pode sair do canvas
+    text_pos = "outside" if len(agg) > 1 and max_v > 0 else "auto"
+
+    fig = go.Figure(go.Bar(
+        x=agg[cat_col].astype(str), y=agg["média"],
+        marker=dict(color=colors, line=dict(width=0)),
+        text=agg["média"].round(2), textposition=text_pos,
+        textfont=dict(color="#2D3F57", size=9, family=_M),
+        customdata=agg["n"],
+        hovertemplate="<b>%{x}</b><br>Média: %{y:.2f}<br>N: %{customdata}<extra></extra>",
+    ))
+    y_max = max_v if max_v > 0 else 1
+    y_min = min(0, min_v)
+    fig.update_layout(
+        **PBASE, height=320, bargap=0.28,
+        xaxis_title=cat_col, yaxis_title=f"Média de {num_col}",
+        yaxis=dict(**PBASE["yaxis"], range=[y_min, y_max * 1.28]),
+    )
+    return fig
 
 
-def plot_correlation_heatmap(df: pd.DataFrame, num_cols: list) -> alt.Chart:
+def plot_heatmap(df: pd.DataFrame, num_cols: list):
     if len(num_cols) < 2:
         return None
 
-    corr = df[num_cols].corr().reset_index().melt(id_vars="index")
-    corr.columns = ["Variável A", "Variável B", "Correlação"]
+    # Remover colunas com variância zero (constantes) — corr() gera NaN
+    valid = [c for c in num_cols if df[c].dropna().nunique() > 1]
+    if len(valid) < 2:
+        return None
 
-    return alt.Chart(corr).mark_rect(opacity=0.9).encode(
-        x=alt.X("Variável B:N", title=""),
-        y=alt.Y("Variável A:N", title=""),
-        color=alt.Color(
-            "Correlação:Q",
-            scale=alt.Scale(scheme="redblue"),
-            title="Correlação"
-        ),
-        tooltip=[alt.Tooltip("Variável A:N"), alt.Tooltip("Variável B:N"), alt.Tooltip("Correlação:Q", format=".3f")],
-    ).properties(
-        height=max(300, len(num_cols) * 50),
-        width=max(300, len(num_cols) * 50),
+    # Precisa de pelo menos 2 linhas para calcular correlação
+    if len(df.dropna(subset=valid)) < 2:
+        return None
+
+    corr = df[valid].corr().round(3)
+
+    # Substituir NaN restantes por 0 para não quebrar o heatmap
+    corr = corr.fillna(0)
+
+    fig = go.Figure(go.Heatmap(
+        z=corr.values, x=corr.columns.tolist(), y=corr.index.tolist(),
+        colorscale=[[0, "#0E7490"], [0.5, "#070E1A"], [1, "#4F46E5"]],
+        zmin=-1, zmax=1,
+        text=corr.values, texttemplate="%{text:.2f}",
+        textfont=dict(size=10, color="#94A3B8", family=_M),
+        hovertemplate="<b>%{y} × %{x}</b><br>r = %{z:.3f}<extra></extra>",
+        showscale=True,
+        colorbar=dict(tickfont=dict(color="#2D3F57", size=9, family=_M), outlinewidth=0, thickness=10),
+    ))
+    fig.update_layout(**PBASE, height=max(300, len(valid) * 54))
+    return fig
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# COMPONENTES
+# ─────────────────────────────────────────────────────────────────────────────
+
+def section_header(title: str, sub: str = ""):
+    st.markdown(
+        f'<div class="sec-wrap"><p class="sec-title">{title}</p>'
+        + (f'<p class="sec-sub">{sub}</p>' if sub else "")
+        + "</div>",
+        unsafe_allow_html=True,
     )
 
 
-# ---------------------------------------------------------------------------
-# SIDEBAR — FILTROS
-# ---------------------------------------------------------------------------
+def chart_header(eyebrow: str, title: str, sub: str = ""):
+    st.markdown(
+        f'<div class="chart-eyebrow">{eyebrow}</div>'
+        f'<p class="chart-title">{title}</p>'
+        + (f'<p class="chart-sub">{sub}</p>' if sub else ""),
+        unsafe_allow_html=True,
+    )
+
+
+def type_pill(vtype: str) -> str:
+    c  = get_type_color(vtype)
+    lb = get_type_label(vtype)
+    r  = _rgb(c)
+    return (f'<span class="type-pill" style="background:rgba({r},0.09);'
+            f'color:{c};border:1px solid rgba({r},0.22);">{lb}</span>')
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SIDEBAR
+# ─────────────────────────────────────────────────────────────────────────────
 
 def build_sidebar(df: pd.DataFrame, classification: dict) -> pd.DataFrame:
     with st.sidebar:
-        st.markdown(
-            '<div class="sidebar-header"><h2>Filtros e Controles</h2></div>',
-            unsafe_allow_html=True,
-        )
+        st.markdown("""
+        <div class="sb-head">
+            <div class="sb-head-eyebrow">Painel de Controle</div>
+            <h2 class="sb-head-title">Filtros e Seleções</h2>
+            <p class="sb-head-sub">Refine os dados exibidos em todas as visualizações e na tabela.</p>
+        </div>
+        <div class="sb-body">
+        """, unsafe_allow_html=True)
 
-        df_filtered = df.copy()
+        df_f = df.copy()
         cat_cols = [
-            col for col, t in classification.items()
-            if t in ("categorical_nominal", "categorical_ordinal", "numeric_discrete")
-            and df[col].nunique() <= 20
+            c for c, t in classification.items()
+            if t in ("categorical_nominal","categorical_ordinal","numeric_discrete")
+            and 2 <= df[c].nunique() <= 20
         ]
         num_cols = [
-            col for col, t in classification.items()
-            if t in ("numeric_continuous", "numeric_discrete")
+            c for c, t in classification.items()
+            if t in ("numeric_continuous","numeric_discrete") and df[c].nunique() > 1
         ]
+        active = []
 
+        # Categóricas
         if cat_cols:
-            st.markdown('<p class="sidebar-section-label">Variáveis Categóricas</p>', unsafe_allow_html=True)
-            for col in cat_cols[:4]:
-                options = sorted(df[col].dropna().unique().tolist(), key=str)
-                selected = st.multiselect(
-                    col,
-                    options=options,
-                    default=[],
-                    key=f"filter_{col}",
+            st.markdown("""
+            <div class="sb-section">
+                <span class="sb-dot" style="background:#6366F1;"></span>
+                <span class="sb-section-text">Variáveis Categóricas</span>
+            </div>
+            """, unsafe_allow_html=True)
+            for col in cat_cols[:5]:
+                opts = sorted(df[col].dropna().unique().tolist(), key=str)
+                sel  = st.multiselect(
+                    col, options=opts, default=[],
+                    key=f"fc_{col}", placeholder=f"Todas ({len(opts)})",
+                    help=f"{len(opts)} categorias disponíveis",
                 )
-                if selected:
-                    df_filtered = df_filtered[df_filtered[col].isin(selected)]
+                if sel:
+                    df_f   = df_f[df_f[col].isin(sel)]
+                    active.append(col)
 
+        # Numéricas
         if num_cols:
-            st.markdown('<p class="sidebar-section-label">Variáveis Numéricas</p>', unsafe_allow_html=True)
+            st.markdown("""
+            <div class="sb-section">
+                <span class="sb-dot" style="background:#06B6D4;"></span>
+                <span class="sb-section-text">Variáveis Numéricas</span>
+            </div>
+            """, unsafe_allow_html=True)
             for col in num_cols[:3]:
-                col_data = df_filtered[col].dropna()
-                if col_data.empty:
-                    continue
-                col_min = float(col_data.min())
-                col_max = float(col_data.max())
-                if col_min == col_max:
-                    continue
-                selected_range = st.slider(
-                    col,
-                    min_value=col_min,
-                    max_value=col_max,
-                    value=(col_min, col_max),
-                    key=f"slider_{col}",
-                )
-                df_filtered = df_filtered[
-                    (df_filtered[col] >= selected_range[0])
-                    & (df_filtered[col] <= selected_range[1])
-                ]
+                cd   = df[col].dropna()
+                if cd.empty: continue
+                cmin = float(cd.min()); cmax = float(cd.max())
+                if cmin >= cmax: continue
+                st.markdown(f'<span class="sb-sl-label">{col}</span>', unsafe_allow_html=True)
+                rng = st.slider(col, min_value=cmin, max_value=cmax,
+                                value=(cmin, cmax), key=f"fn_{col}",
+                                label_visibility="collapsed", format="%.3g")
+                if rng != (cmin, cmax):
+                    df_f   = df_f[df_f[col].between(rng[0], rng[1])]
+                    active.append(col)
 
-        st.markdown('<p class="sidebar-section-label">Amostragem</p>', unsafe_allow_html=True)
-        total = len(df)
-        filtered = len(df_filtered)
-        pct = filtered / max(total, 1) * 100
-        st.markdown(
-            f'<div style="color:#94A3B8;font-size:0.82rem;">'
-            f'{filtered} de {total} registros ({pct:.1f}%)</div>',
-            unsafe_allow_html=True,
-        )
+        # Contador
+        total    = len(df)
+        filtered = len(df_f)
+        pct      = filtered / max(total, 1) * 100
+        st.markdown(f"""
+        <div class="sb-counter">
+            <div class="sb-counter-lbl">Registros selecionados</div>
+            <div class="sb-counter-row">
+                <span class="sb-val">{filtered:,}</span>
+                <span class="sb-of">de {total:,}</span>
+                <span class="sb-pct">{pct:.1f}%</span>
+            </div>
+            <div class="sb-track"><div class="sb-fill" style="width:{pct:.2f}%;"></div></div>
+        </div>
+        """, unsafe_allow_html=True)
 
-        if st.button("Limpar Filtros", use_container_width=True):
-            st.rerun()
+        if active:
+            if st.button("↺  Limpar todos os filtros", use_container_width=True):
+                st.rerun()
 
-    return df_filtered
+        st.markdown("</div>", unsafe_allow_html=True)
+    return df_f
 
 
-# ---------------------------------------------------------------------------
-# SECAO: VISUALIZACOES
-# ---------------------------------------------------------------------------
+# ─────────────────────────────────────────────────────────────────────────────
+# SEÇÃO: VISUALIZAÇÕES
+# ─────────────────────────────────────────────────────────────────────────────
 
 def render_visualizations(df: pd.DataFrame, classification: dict):
+    # Categóricas: aceitar mesmo com 1 valor único (o gráfico de barras funciona; pizza mostrará aviso)
     cat_cols = [
-        col for col, t in classification.items()
+        c for c, t in classification.items()
         if t in ("categorical_nominal", "categorical_ordinal")
-        and df[col].nunique() >= 2
+        and df[c].dropna().size > 0
     ]
     num_cols = [
-        col for col, t in classification.items()
+        c for c, t in classification.items()
         if t in ("numeric_continuous", "numeric_discrete")
+        and not df[c].dropna().empty
     ]
 
-    tab_labels = ["Categóricas", "Numéricas", "Comparações", "Correlação"]
-    tabs = st.tabs(tab_labels)
+    tabs = st.tabs(["  Categóricas  ","  Numéricas  ","  Comparações  ","  Correlação  "])
 
-    # ---- TAB 1: Categóricas ----
+    # TAB 1
     with tabs[0]:
         if not cat_cols:
-            st.markdown('<div class="info-box">Nenhuma variável categórica encontrada no conjunto de dados.</div>', unsafe_allow_html=True)
+            st.markdown('<div class="info-box">Nenhuma variável categórica encontrada.</div>', unsafe_allow_html=True)
         else:
-            selected_cat = st.selectbox(
-                "Selecionar variável",
-                cat_cols,
-                key="cat_select",
-            )
-            col_a, col_b = st.columns(2)
-            with col_a:
-                with st.container():
-                    render_chart_header(
-                        f"Distribuição de {selected_cat}",
-                        "Frequência absoluta por categoria",
-                    )
-                    st.altair_chart(
-                        plot_bar(df, selected_cat),
-                        use_container_width=True,
-                    )
-            with col_b:
-                with st.container():
-                    render_chart_header(
-                        f"Proporção de {selected_cat}",
-                        "Participação relativa de cada categoria",
-                    )
-                    st.altair_chart(
-                        plot_pie(df, selected_cat),
-                        use_container_width=True,
-                    )
+            sel = st.selectbox("Variável", cat_cols, key="v_cat", label_visibility="collapsed")
+            l, r = st.columns(2, gap="medium")
+            with l:
+                st.markdown('<div class="chart-wrap">', unsafe_allow_html=True)
+                chart_header("Frequência", f"Distribuição de {sel}", "Contagem absoluta por categoria")
+                st.plotly_chart(plot_bar(df, sel), use_container_width=True, config=_cfg())
+                st.markdown("</div>", unsafe_allow_html=True)
+            with r:
+                st.markdown('<div class="chart-wrap">', unsafe_allow_html=True)
+                chart_header("Proporção", f"Composição de {sel}", "Participação relativa de cada categoria")
+                st.plotly_chart(plot_pie(df, sel), use_container_width=True, config=_cfg())
+                st.markdown("</div>", unsafe_allow_html=True)
 
-    # ---- TAB 2: Numéricas ----
+    # TAB 2
     with tabs[1]:
         if not num_cols:
-            st.markdown('<div class="info-box">Nenhuma variável numérica encontrada no conjunto de dados.</div>', unsafe_allow_html=True)
+            st.markdown('<div class="info-box">Nenhuma variável numérica encontrada.</div>', unsafe_allow_html=True)
         else:
-            selected_num = st.selectbox(
-                "Selecionar variável",
-                num_cols,
-                key="num_select",
-            )
-            col_a, col_b = st.columns(2)
-            with col_a:
-                render_chart_header(
-                    f"Histograma — {selected_num}",
-                    "Distribuição de frequências",
-                )
-                st.altair_chart(
-                    plot_histogram(df, selected_num),
-                    use_container_width=True,
-                )
-            with col_b:
-                render_chart_header(
-                    f"Boxplot — {selected_num}",
-                    "Mediana, quartis e valores atipicos",
-                )
-                st.altair_chart(
-                    plot_boxplot(df, selected_num),
-                    use_container_width=True,
-                )
+            sel = st.selectbox("Variável", num_cols, key="v_num", label_visibility="collapsed")
+            l, r = st.columns(2, gap="medium")
+            with l:
+                st.markdown('<div class="chart-wrap">', unsafe_allow_html=True)
+                chart_header("Distribuição", f"Histograma — {sel}", "Frequência por intervalo de valores")
+                st.plotly_chart(plot_histogram(df, sel), use_container_width=True, config=_cfg())
+                st.markdown("</div>", unsafe_allow_html=True)
+            with r:
+                st.markdown('<div class="chart-wrap">', unsafe_allow_html=True)
+                chart_header("Dispersão", f"Boxplot — {sel}", "Mediana, quartis e valores atípicos")
+                st.plotly_chart(plot_boxplot(df, sel), use_container_width=True, config=_cfg())
+                st.markdown("</div>", unsafe_allow_html=True)
 
-            # Estatísticas descritivas
             st.markdown("<br>", unsafe_allow_html=True)
-            render_section("Estatisticas Descritivas")
-            desc = df[selected_num].describe().round(3)
-            stat_cols = st.columns(len(desc))
-            labels_map = {
-                "count": "Registros", "mean": "Media",
-                "std": "Desvio-Padrao", "min": "Minimo",
-                "25%": "Q1", "50%": "Mediana",
-                "75%": "Q3", "max": "Maximo",
-            }
+            section_header("Estatísticas Descritivas")
+            desc   = df[sel].describe().round(4)
+            labels = {"count":"Registros","mean":"Média","std":"Desvio-Padrão",
+                      "min":"Mínimo","25%":"Q1","50%":"Mediana","75%":"Q3","max":"Máximo"}
+            sc = st.columns(len(desc))
             for i, (stat, val) in enumerate(desc.items()):
-                with stat_cols[i]:
-                    render_kpi_card(
-                        labels_map.get(stat, stat),
-                        f"{val:,.2f}",
-                        accent_color="#8B5CF6",
+                with sc[i]:
+                    st.markdown(
+                        f'<div class="kpi-card" style="padding:.85rem 1rem;">'
+                        f'<div class="kpi-lbl">{labels.get(stat,stat)}</div>'
+                        f'<div class="kpi-val" style="font-size:1.1rem;color:#818CF8;">{val:,.3g}</div>'
+                        f'</div>',
+                        unsafe_allow_html=True,
                     )
 
-    # ---- TAB 3: Comparações ----
+    # TAB 3
     with tabs[2]:
         if not cat_cols or not num_cols:
+            st.markdown('<div class="info-box">São necessárias pelo menos uma variável categórica e uma numérica para gerar comparações.</div>', unsafe_allow_html=True)
+        else:
+            c1, c2 = st.columns(2, gap="medium")
+            with c1: grp = st.selectbox("Agrupamento (categórica)", cat_cols, key="cmp_c")
+            with c2: val = st.selectbox("Valor (numérica)", num_cols, key="cmp_n")
+            l, r = st.columns(2, gap="medium")
+            with l:
+                st.markdown('<div class="chart-wrap">', unsafe_allow_html=True)
+                chart_header("Médias", f"{val} por {grp}", "Valor médio agrupado por categoria")
+                st.plotly_chart(plot_grouped_bar(df, grp, val), use_container_width=True, config=_cfg())
+                st.markdown("</div>", unsafe_allow_html=True)
+            with r:
+                st.markdown('<div class="chart-wrap">', unsafe_allow_html=True)
+                chart_header("Dispersão", f"{val} por {grp}", "Distribuição e variabilidade por grupo")
+                st.plotly_chart(plot_boxplot(df, val, grp), use_container_width=True, config=_cfg())
+                st.markdown("</div>", unsafe_allow_html=True)
+
+    # TAB 4
+    with tabs[3]:
+        # Filtrar apenas colunas com variância real (>1 valor único) e ≥2 linhas válidas
+        valid_num = [c for c in num_cols if df[c].dropna().nunique() > 1]
+        if len(valid_num) < 2:
             st.markdown(
-                '<div class="info-box">É necessário ter pelo menos uma variável categórica e uma variável numérica para comparações.</div>',
+                '<div class="info-box">São necessárias pelo menos 2 variáveis numéricas '
+                'com valores distintos para calcular correlações.</div>',
+                unsafe_allow_html=True,
+            )
+        elif len(df.dropna(subset=valid_num)) < 2:
+            st.markdown(
+                '<div class="info-box">São necessários pelo menos 2 registros completos '
+                'para calcular correlações.</div>',
                 unsafe_allow_html=True,
             )
         else:
-            col_a, col_b = st.columns(2)
-            with col_a:
-                group_col = st.selectbox("Variável de agrupamento (categórica)", cat_cols, key="grp_cat")
-            with col_b:
-                value_col = st.selectbox("Variável de valor (numérica)", num_cols, key="grp_num")
-
-            col_c, col_d = st.columns(2)
-            with col_c:
-                render_chart_header(
-                    f"Média de {value_col} por {group_col}",
-                    "Agrupamento por categoria",
-                )
-                st.altair_chart(
-                    plot_grouped_bar(df, group_col, value_col),
-                    use_container_width=True,
-                )
-            with col_d:
-                render_chart_header(
-                    f"Boxplot de {value_col} por {group_col}",
-                    "Dispersão por categoria",
-                )
-                st.altair_chart(
-                    plot_boxplot(df, value_col, group_col),
-                    use_container_width=True,
-                )
-
-    # ---- TAB 4: Correlação ----
-    with tabs[3]:
-        if len(num_cols) < 2:
-            st.markdown('<div class="info-box">São necessárias ao menos duas variáveis numéricas para calcular correlações.</div>', unsafe_allow_html=True)
-        else:
-            heatmap = plot_correlation_heatmap(df, num_cols)
-            if heatmap:
-                render_chart_header(
-                    "Mapa de Correlação",
-                    "Coeficiente de Pearson entre variáveis numéricas (-1 a +1)",
-                )
-                st.altair_chart(
-                    heatmap,
-                    use_container_width=True,
-                )
-
-                # Interpretação
-                corr_matrix = df[num_cols].corr()
-                pairs = []
-                for i in range(len(num_cols)):
-                    for j in range(i + 1, len(num_cols)):
-                        pairs.append({
-                            "Variável A": num_cols[i],
-                            "Variável B": num_cols[j],
-                            "Correlação": round(corr_matrix.iloc[i, j], 4),
-                        })
+            hm = plot_heatmap(df, valid_num)
+            if hm:
+                st.markdown('<div class="chart-wrap">', unsafe_allow_html=True)
+                chart_header("Pearson", "Mapa de Correlação", "Coeficiente de Pearson entre variáveis numéricas (−1 a +1)")
+                st.plotly_chart(hm, use_container_width=True, config=_cfg())
+                st.markdown("</div>", unsafe_allow_html=True)
+                st.markdown("<br>", unsafe_allow_html=True)
+                section_header("Pares Ordenados por Força de Correlação")
+                corr_m = df[valid_num].corr().fillna(0)
+                pairs  = [
+                    {"Variável A": valid_num[i], "Variável B": valid_num[j],
+                     "Correlação": round(corr_m.iloc[i, j], 4)}
+                    for i in range(len(valid_num)) for j in range(i+1, len(valid_num))
+                ]
                 if pairs:
-                    corr_df = pd.DataFrame(pairs).sort_values(
-                        "Correlação", key=abs, ascending=False
-                    )
                     st.dataframe(
-                        corr_df,
-                        use_container_width=True,
-                        hide_index=True,
+                        pd.DataFrame(pairs).sort_values("Correlação", key=abs, ascending=False),
+                        use_container_width=True, hide_index=True,
                     )
 
 
-# ---------------------------------------------------------------------------
+# ─────────────────────────────────────────────────────────────────────────────
 # SEÇÃO: INSIGHTS
-# ---------------------------------------------------------------------------
+# ─────────────────────────────────────────────────────────────────────────────
 
 def render_insights(df: pd.DataFrame, classification: dict):
     insights = generate_insights(df, classification)
-
     if not insights:
         st.markdown('<div class="info-box">Não foi possível gerar insights automáticos com os dados atuais.</div>', unsafe_allow_html=True)
         return
 
-    cols_per_row = 3
-    rows = [insights[i:i+cols_per_row] for i in range(0, len(insights), cols_per_row)]
-
-    for row in rows:
-        cols = st.columns(cols_per_row)
-        for i, insight in enumerate(row):
-            accent = "#6366F1" if insight["type"] == "numeric" else "#06B6D4"
+    for row_s in range(0, len(insights), 3):
+        row  = insights[row_s:row_s+3]
+        cols = st.columns(3, gap="small")
+        for i, ins in enumerate(row):
+            ac = "#6366F1" if ins["type"] == "numeric" else "#06B6D4"
             with cols[i]:
                 st.markdown(
-                    f"""
-                    <div class="insight-card" style="border-left: 3px solid {accent};">
-                        <div class="insight-title">{insight['title']}</div>
-                        <div class="insight-value">{insight['value']}</div>
-                        <div class="insight-detail">{insight['detail']}</div>
-                    </div>
-                    """,
+                    f'<div class="ins-card">'
+                    f'<div class="ins-accent" style="background:{ac};"></div>'
+                    f'<div class="ins-lbl">{ins["title"]}</div>'
+                    f'<div class="ins-val">{ins["value"]}</div>'
+                    f'<div class="ins-detail">{ins["detail"]}</div>'
+                    f'</div>',
                     unsafe_allow_html=True,
                 )
 
 
-# ---------------------------------------------------------------------------
+# ─────────────────────────────────────────────────────────────────────────────
 # SEÇÃO: METODOLOGIA
-# ---------------------------------------------------------------------------
+# ─────────────────────────────────────────────────────────────────────────────
 
 def render_methodology(df: pd.DataFrame, classification: dict):
-    rows_html = ""
-    for col, var_type in classification.items():
-        n_unique = df[col].nunique()
-        n_null = df[col].isnull().sum()
-        completeness = round((1 - n_null / max(len(df), 1)) * 100, 1)
-        badge = render_type_badge(var_type)
-        rows_html += f"""
-        <tr>
-            <td style="font-family:'IBM Plex Mono',monospace;color:#6366F1;font-size:0.82rem;">{col}</td>
-            <td>{badge}</td>
-            <td style="text-align:center;">{n_unique}</td>
-            <td style="text-align:center;">{completeness}%</td>
-        </tr>
-        """
-
+    rows = ""
+    for col, vt in classification.items():
+        nu = df[col].nunique()
+        cp = round((1 - df[col].isnull().sum() / max(len(df),1)) * 100, 1)
+        rows += (
+            f"<tr><td><code>{col}</code></td><td>{type_pill(vt)}</td>"
+            f"<td style='text-align:center;font-family:\"JetBrains Mono\",monospace;font-size:.75rem;color:#3D526B;'>{nu}</td>"
+            f"<td style='text-align:center;font-family:\"JetBrains Mono\",monospace;font-size:.75rem;color:#3D526B;'>{cp}%</td></tr>"
+        )
     st.markdown(
-        f"""
-        <table class="methodology-table">
-            <thead>
-                <tr>
-                    <th>Variável</th>
-                    <th>Tipo Classificado</th>
-                    <th style="text-align:center;">Valores Únicos</th>
-                    <th style="text-align:center;">Completude</th>
-                </tr>
-            </thead>
-            <tbody>
-                {rows_html}
-            </tbody>
-        </table>
-        """,
+        f'<table class="meth-table"><thead><tr>'
+        f'<th>Variável</th><th>Tipo Classificado</th>'
+        f'<th style="text-align:center;">Valores Únicos</th>'
+        f'<th style="text-align:center;">Completude</th>'
+        f'</tr></thead><tbody>{rows}</tbody></table>',
         unsafe_allow_html=True,
     )
 
 
-# ---------------------------------------------------------------------------
+# ─────────────────────────────────────────────────────────────────────────────
 # MAIN
-# ---------------------------------------------------------------------------
+# ─────────────────────────────────────────────────────────────────────────────
 
 def main():
     st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 
-    # --- Carregar dados ---
-    with st.spinner("Conectando a API e carregando dados..."):
+    with st.spinner("Conectando à planilha e carregando dados..."):
         raw_df = fetch_data()
 
     if raw_df.empty:
-        st.markdown(
-            '<div class="warning-box">'
-            'Não foi possível carregar os dados da API. '
-            'Veja o diagnóstico abaixo.'
-            '</div>',
-            unsafe_allow_html=True,
-        )
+        st.markdown('<div class="warn-box"><strong>Atenção:</strong> Não foi possível carregar os dados da planilha. Veja o diagnóstico abaixo.</div>', unsafe_allow_html=True)
         with st.expander("Diagnóstico da conexão", expanded=True):
             from utils import CSV_EXPORT_URL, SHEET_ID, SHEET_GID
-
-            st.markdown(f"**URL de exportação CSV:**")
-            st.code(CSV_EXPORT_URL, language="text")
-            st.markdown(
-                """
-                **Possíveis causas do erro:**
-                - A planilha não está compartilhada publicamente
-                  → No Google Sheets: *Compartilhar → Qualquer pessoa com o link → Leitor*
-                - O `gid` da aba está incorreto
-                  → Abra a planilha no navegador e copie o número após `gid=` na URL
-                - Sem acesso a internet ou rede corporativa bloqueando `docs.google.com`
-                  → Tente abrir a URL acima diretamente no navegador para verificar
-                """
-            )
-            st.markdown(
-                f"**SHEET_ID:** `{SHEET_ID}`  \n"
-                f"**SHEET_GID:** `{SHEET_GID}`"
-            )
+            st.markdown("**URL de exportação CSV:**")
+            st.code(CSV_EXPORT_URL)
+            st.markdown("""
+            **Possíveis causas:**
+            - Planilha não compartilhada → *Compartilhar → Qualquer pessoa com o link → Leitor*
+            - `gid` incorreto → copie o número após `gid=` na URL da planilha
+            - Sem acesso à internet ou rede bloqueando `docs.google.com`
+            """)
+            st.caption(f"SHEET_ID = {SHEET_ID} · SHEET_GID = {SHEET_GID}")
         st.stop()
 
-    df = clean_dataframe(raw_df)
+    df             = clean_dataframe(raw_df)
     classification = classify_columns(df)
-    kpis = compute_kpis(df, classification)
+    kpis           = compute_kpis(df, classification)
+    df_f           = build_sidebar(df, classification)
 
-    # --- Sidebar com filtros ---
-    df_filtered = build_sidebar(df, classification)
-
-    # =========================================================================
-    # HEADER
-    # =========================================================================
-    st.markdown(
-        """
-        <div class="main-header">
-            <div class="header-badge"><i class="bi bi-speedometer2"></i> Dashboard Analítico</div>
-            <h1>Painel de Análise de Dados</h1>
-            <p>
-                Painel de análise exploratória com visualizações modernas e métricas automáticas.
-                Dados importados em tempo real a partir do Google Sheets, classificados e apresentados
-                com estatísticas claras, comparações e insights relevantes.
-            </p>
+    # ── Header ────────────────────────────────────────────────────────────────
+    st.markdown("""
+    <div class="dash-header">
+        <div class="dash-eyebrow">
+            <span class="dash-pulse"></span>
+            Trabalho de Conclusão de Curso
         </div>
-        """,
-        unsafe_allow_html=True,
-    )
+        <h1 class="dash-title">Dashboard de Análise de Dados</h1>
+        <p class="dash-desc">
+            Plataforma de análise exploratória estruturada sobre dados coletados via Google Forms.
+            Os dados são carregados em tempo real a partir do Google Sheets e processados com
+            classificação automática de variáveis, visualizações interativas e geração de
+            insights estatísticos.
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
 
-    # =========================================================================
-    # KPIs
-    # =========================================================================
-    render_section("Visão Geral do Conjunto de Dados", "Métricas gerais extraídas do conjunto de dados atual")
+    # ── KPIs ──────────────────────────────────────────────────────────────────
+    section_header("Visão Geral", "Métricas extraídas do conjunto de dados carregado")
+    cards  = [
+        ("Registros Totais", f"{kpis['total_records']:,}",  "respostas coletadas",   "#6366F1"),
+        ("Variáveis",        f"{kpis['total_columns']}",     "campos analisados",     "#8B5CF6"),
+        ("Completude",       f"{kpis['completeness']}%",     "dados preenchidos",     "#10B981"),
+        ("Var. Numéricas",   f"{kpis['numeric_cols']}",      "contínuas + discretas", "#06B6D4"),
+        ("Var. Categóricas", f"{kpis['categorical_cols']}",  "nominais + ordinais",   "#F59E0B"),
+    ]
+    for col_w, (lbl, val, sub, ac) in zip(st.columns(5, gap="small"), cards):
+        with col_w:
+            st.markdown(
+                f'<div class="kpi-card" style="border-bottom:2px solid rgba({_rgb(ac)},0.25);">'
+                f'<div class="kpi-lbl">{lbl}</div>'
+                f'<div class="kpi-val" style="color:{ac};">{val}</div>'
+                f'<div class="kpi-sub">{sub}</div></div>',
+                unsafe_allow_html=True,
+            )
 
-    k1, k2, k3, k4, k5 = st.columns(5)
-    with k1:
-        render_kpi_card("Registros Totais", f"{kpis['total_records']:,}", "respostas coletadas", "#6366F1")
-    with k2:
-        render_kpi_card("Variáveis", f"{kpis['total_columns']}", "campos analisados", "#8B5CF6")
-    with k3:
-        render_kpi_card("Completude", f"{kpis['completeness']}%", "percentual de preenchimento", "#10B981")
-    with k4:
-        render_kpi_card("Variáveis Numéricas", f"{kpis['numeric_cols']}", "contínuas + discretas", "#06B6D4")
-    with k5:
-        render_kpi_card("Variáveis Categóricas", f"{kpis['categorical_cols']}", "nominais + ordinais", "#F59E0B")
-
-    if len(df_filtered) < len(df):
+    if len(df_f) < len(df):
         st.markdown("<br>", unsafe_allow_html=True)
+        n_ocultos = len(df) - len(df_f)
         st.markdown(
-            f'<div class="info-box">Filtros ativos: exibindo <strong>{len(df_filtered)}</strong> de '
-            f'<strong>{len(df)}</strong> registros.</div>',
+            f'<div class="af-bar">'
+            f'<span class="af-lbl">Filtros ativos</span>'
+            f'<span class="af-pill">{len(df_f):,} de {len(df):,} registros</span>'
+            f'<span class="af-pill">{n_ocultos:,} registros ocultados</span>'
+            f'</div>',
             unsafe_allow_html=True,
         )
 
     st.markdown("<br>", unsafe_allow_html=True)
 
-    # =========================================================================
-    # METODOLOGIA
-    # =========================================================================
+    # ── Metodologia ───────────────────────────────────────────────────────────
     with st.expander("Metodologia — Classificação de Variáveis", expanded=False):
-        render_section(
-            "Classificação Automática de Variáveis",
-            "Cada variável foi classificada com base em tipo de dado e número de valores únicos."
-        )
+        section_header("Classificação Automática de Variáveis",
+                        "Cada variável foi classificada com base no tipo de dado e no número de valores únicos.")
         render_methodology(df, classification)
         st.markdown("<br>", unsafe_allow_html=True)
-        st.markdown(
-            """
-            <div class="info-box">
-                <strong>Critérios de classificação:</strong>
-                Numérica Contínua (numérica com mais de 20 valores únicos) |
-                Numérica Discreta (numérica com até 20 valores únicos) |
-                Categórica Nominal (texto com até 30 categorias, sem ordem) |
-                Categórica Ordinal (detecção por palavras-chave e padrões de escala) |
-                Texto Livre (média de palavras maior que 4 e muitos valores únicos) |
-                Data (reconhecimento de formatos de data).
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
-    st.markdown('<hr class="section-divider">', unsafe_allow_html=True)
-
-    # =========================================================================
-    # VISUALIZACOES
-    # =========================================================================
-    render_section(
-        "Análise Exploratória",
-        "Visualizações interativas segmentadas por tipo de variável",
-    )
-    render_visualizations(df_filtered, classification)
-
-    st.markdown('<hr class="section-divider">', unsafe_allow_html=True)
-
-    # =========================================================================
-    # INSIGHTS AUTOMATICOS
-    # =========================================================================
-    render_section(
-        "Insights Automáticos",
-        "Padrões e estatísticas relevantes identificados no conjunto de dados filtrado",
-    )
-    render_insights(df_filtered, classification)
-
-    st.markdown('<hr class="section-divider">', unsafe_allow_html=True)
-
-    # =========================================================================
-    # TABELA INTERATIVA
-    # =========================================================================
-    render_section(
-        "Tabela de Dados",
-        f"Visualização dos registros filtrados — {len(df_filtered)} linhas x {len(df_filtered.columns)} colunas",
-    )
-
-    _, download_col = st.columns([3, 1])
-    with download_col:
-        csv_data = df_filtered.to_csv(index=False).encode("utf-8")
-        st.download_button(
-            label="Exportar CSV",
-            data=csv_data,
-            file_name="dados_filtrados.csv",
-            mime="text/csv",
-            use_container_width=True,
-        )
-
-    display_df = df_filtered.copy()
-
-    # Substituir DataHora numérico/nao-desejado por formato legível
-    if "DataHoraFormatado" in display_df.columns:
-        display_df = display_df.drop(columns=["DataHora"], errors="ignore")
-        display_df = display_df.rename(columns={"DataHoraFormatado": "HorarioDia"})
-
-    # Remover colunas duplicadas residuais para não quebrar o Streamlit
-    display_df = display_df.loc[:, ~display_df.columns.duplicated()]
-
-    st.dataframe(
-        display_df,
-        use_container_width=True,
-        height=400,
-    )
-
-    # =========================================================================
-    # RODAPÉ
-    # =========================================================================
-    st.markdown("<br><br>", unsafe_allow_html=True)
-    st.markdown(
-        """
-        <div style="text-align:center;color:#334155;font-size:0.78rem;padding:1rem 0;border-top:1px solid #1E293B;">
-            Dashboard desenvolvido com Streamlit e Altair &mdash;
-            Dados coletados via Google Forms &middot; API Google Apps Script
+        st.markdown("""
+        <div class="info-box">
+            <strong>Critérios de classificação:</strong>
+            Numérica Contínua (&gt; 20 valores únicos) ·
+            Numérica Discreta (≤ 20 valores únicos) ·
+            Categórica Nominal (texto com até 30 categorias, sem ordem definida) ·
+            Categórica Ordinal (detectada por palavras-chave e padrões de escala Likert) ·
+            Texto Livre (média superior a 4 palavras e alta cardinalidade) ·
+            Data (reconhecimento automático de formatos de data).
         </div>
-        """,
-        unsafe_allow_html=True,
-    )
+        """, unsafe_allow_html=True)
+
+    st.markdown('<hr class="divider">', unsafe_allow_html=True)
+
+    # ── Visualizações ─────────────────────────────────────────────────────────
+    section_header("Análise Exploratória",
+                    "Visualizações interativas segmentadas por tipo de variável — selecione a aba desejada")
+    render_visualizations(df_f, classification)
+
+    st.markdown('<hr class="divider">', unsafe_allow_html=True)
+
+    # ── Insights ──────────────────────────────────────────────────────────────
+    section_header("Insights Automáticos",
+                    "Padrões e estatísticas relevantes identificados no conjunto de dados filtrado")
+    render_insights(df_f, classification)
+
+    st.markdown('<hr class="divider">', unsafe_allow_html=True)
+
+    # ── Tabela ────────────────────────────────────────────────────────────────
+    section_header("Tabela de Dados",
+                    f"{len(df_f):,} linhas × {len(df_f.columns)} colunas — dados filtrados")
+    sc, dc = st.columns([4,1], gap="small")
+    with sc:
+        search = st.text_input("Busca", placeholder="Buscar em todos os campos...",
+                                key="tbl_s", label_visibility="collapsed")
+    with dc:
+        st.download_button("Exportar CSV",
+                           data=df_f.to_csv(index=False).encode("utf-8"),
+                           file_name="dados_filtrados.csv", mime="text/csv",
+                           use_container_width=True)
+
+    display = df_f
+    if search:
+        mask    = display.astype(str).apply(lambda c: c.str.contains(search, case=False, na=False)).any(axis=1)
+        display = display[mask]
+        if display.empty:
+            st.markdown(f'<div class="info-box">Nenhum resultado encontrado para "<strong>{search}</strong>".</div>', unsafe_allow_html=True)
+
+    st.dataframe(display, use_container_width=True, height=420)
+
+    # ── Rodapé ────────────────────────────────────────────────────────────────
+    st.markdown("""
+    <div class="dash-footer">
+        Dashboard desenvolvido com Streamlit &amp; Plotly &nbsp;·&nbsp;
+        Dados coletados via Google Forms e Google Sheets &nbsp;·&nbsp;
+        Trabalho de Conclusão de Curso
+    </div>
+    """, unsafe_allow_html=True)
 
 
 if __name__ == "__main__":
