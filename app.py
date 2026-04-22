@@ -504,11 +504,13 @@ def plot_histogram(df: pd.DataFrame, col: str) -> go.Figure:
 
 
 def plot_boxplot(df: pd.DataFrame, col: str, group_col: str = None) -> go.Figure:
+    base = {k: v for k, v in PBASE.items() if k not in ("xaxis", "yaxis")}
+ 
     if group_col and group_col != col:
         groups = df[group_col].value_counts().head(8).index.tolist()
         if not groups:
             return _empty()
-
+ 
         fig = go.Figure()
         traces_added = 0
         for i, grp in enumerate(groups):
@@ -516,7 +518,6 @@ def plot_boxplot(df: pd.DataFrame, col: str, group_col: str = None) -> go.Figure
             if sub.empty:
                 continue
             c   = PAL[i % len(PAL)]
-            # Com apenas 1 ponto, boxpoints="all" para mostrar o dado
             pts = "all" if len(sub) <= 5 else "outliers"
             fig.add_trace(go.Box(
                 y=sub, name=str(grp),
@@ -527,20 +528,24 @@ def plot_boxplot(df: pd.DataFrame, col: str, group_col: str = None) -> go.Figure
                 hovertemplate=f"<b>{grp}</b><br>%{{y}}<extra></extra>",
             ))
             traces_added += 1
-
+ 
         if traces_added == 0:
             return _empty()
-
-        fig.update_layout(**PBASE, height=340, yaxis_title=col)
+ 
+        fig.update_layout(**base, height=340)
+        fig.update_xaxes(**PBASE["xaxis"])
+        fig.update_yaxes(**PBASE["yaxis"], title_text=col)
+        return fig
+ 
     else:
         s = df[col].dropna()
         if s.empty:
             return _empty()
-
+ 
         n   = len(s)
         pts = "all" if n <= 10 else "outliers"
-
-        # Com apenas 1 ponto, Plotly não desenha caixa — mostrar scatter
+ 
+        # Com apenas 1 ponto, Plotly não desenha caixa — usar scatter
         if n == 1:
             fig = go.Figure(go.Scatter(
                 x=[col], y=[s.iloc[0]],
@@ -548,19 +553,24 @@ def plot_boxplot(df: pd.DataFrame, col: str, group_col: str = None) -> go.Figure
                 marker=dict(color="#6366F1", size=12, symbol="circle"),
                 hovertemplate=f"{col}: %{{y}}<extra></extra>",
             ))
-            fig.update_layout(**PBASE, height=300, yaxis_title=col,
-                              xaxis=dict(**PBASE["xaxis"], showticklabels=False))
+            fig.update_layout(**base, height=300)
+            fig.update_xaxes(**PBASE["xaxis"], showticklabels=False)
+            fig.update_yaxes(**PBASE["yaxis"], title_text=col)
             return fig
-
+ 
         fig = go.Figure(go.Box(
-            y=s, marker=dict(color="#6366F1", size=5, opacity=0.7),
+            y=s,
+            marker=dict(color="#6366F1", size=5, opacity=0.7),
             line=dict(color="#6366F1", width=1.5),
             fillcolor="rgba(99,102,241,0.1)",
             boxpoints=pts, jitter=0.35, name=col, showlegend=False,
             hovertemplate="%{y}<extra></extra>",
         ))
-        fig.update_layout(**PBASE, height=300, yaxis_title=col)
-    return fig
+        fig.update_layout(**base, height=300)
+        fig.update_xaxes(**PBASE["xaxis"])
+        fig.update_yaxes(**PBASE["yaxis"], title_text=col)
+        return fig
+ 
 
 
 def plot_grouped_bar(df: pd.DataFrame, cat_col: str, num_col: str) -> go.Figure:
