@@ -361,6 +361,11 @@ def _rgb(h: str) -> str:
     return f"{int(h[0:2],16)},{int(h[2:4],16)},{int(h[4:6],16)}"
 
 
+def _base() -> dict:
+    """PBASE sem xaxis/yaxis — evita TypeError de chave duplicada no update_layout."""
+    return {k: v for k, v in PBASE.items() if k not in ("xaxis", "yaxis")}
+
+
 def _cfg() -> dict:
     return {
         "displayModeBar": True, "displaylogo": False,
@@ -377,14 +382,16 @@ def _cfg() -> dict:
 # GRÁFICOS
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _empty(msg="Sem dados suficientes para exibir o gráfico.") -> go.Figure:
+def _empty(msg="Dados insuficientes para exibir o gráfico.") -> go.Figure:
     fig = go.Figure()
     fig.add_annotation(
         text=msg, x=0.5, y=0.5, showarrow=False,
         font=dict(color="#2D3F57", size=12, family=_F),
         xref="paper", yref="paper", align="center",
     )
-    fig.update_layout(**PBASE, height=260)
+    fig.update_layout(**_base(), height=260)
+    fig.update_xaxes(**PBASE["xaxis"])
+    fig.update_yaxes(**PBASE["yaxis"])
     return fig
 
 
@@ -394,37 +401,23 @@ def plot_bar(df: pd.DataFrame, col: str) -> go.Figure:
     counts = counts.sort_values("n", ascending=True).tail(25)
     if counts.empty:
         return _empty()
- 
-    max_n = int(counts["n"].max())
-    denom = max_n if max_n > 0 else 1
-    colors = [f"rgba(99,102,241,{0.3 + 0.7 * (v / denom):.2f})" for v in counts["n"]]
+
+    max_n  = int(counts["n"].max())
+    denom  = max_n if max_n > 0 else 1
+    colors = [f"rgba(99,102,241,{0.3 + 0.7*(v/denom):.2f})" for v in counts["n"]]
     bar_height = max(260, len(counts) * 44)
- 
+
     fig = go.Figure(go.Bar(
-        x=counts["n"],
-        y=counts[col].astype(str),
+        x=counts["n"], y=counts[col].astype(str),
         orientation="h",
         marker=dict(color=colors, line=dict(width=0)),
-        text=counts["n"],
-        textposition="outside",
+        text=counts["n"], textposition="outside",
         textfont=dict(color="#2D3F57", size=10, family=_M),
         hovertemplate="<b>%{y}</b><br>Contagem: %{x}<extra></extra>",
     ))
- 
-    # Aplicar PBASE sem xaxis/yaxis para evitar conflito de chaves duplicadas
-    base = {k: v for k, v in PBASE.items() if k not in ("xaxis", "yaxis")}
-    fig.update_layout(**base, height=bar_height, bargap=0.3)
- 
-    # Aplicar eixos separadamente via update_xaxes / update_yaxes
-    fig.update_xaxes(
-        **PBASE["xaxis"],
-        showgrid=False,
-        range=[0, max(max_n * 1.3, 2)],
-    )
-    fig.update_yaxes(
-        **PBASE["yaxis"],
-        categoryorder="total ascending",
-    )
+    fig.update_layout(**_base(), height=bar_height, bargap=0.3)
+    fig.update_xaxes(**PBASE["xaxis"], showgrid=False, range=[0, max(max_n * 1.3, 2)])
+    fig.update_yaxes(**PBASE["yaxis"], categoryorder="total ascending")
     return fig
 
 
@@ -434,11 +427,10 @@ def plot_pie(df: pd.DataFrame, col: str) -> go.Figure:
     if counts.empty:
         return _empty()
 
-    # Com apenas 1 categoria não há proporção — mostrar mensagem informativa
     if len(counts) < 2:
         return _empty(
             f"Apenas uma categoria: <b>{counts.iloc[0][col]}</b><br>"
-            f"({int(counts.iloc[0]['n'])} registro(s)). "
+            f"({int(counts.iloc[0]['n'])} registro(s)).<br>"
             "São necessárias pelo menos 2 categorias para o gráfico de proporção."
         )
 
@@ -449,9 +441,7 @@ def plot_pie(df: pd.DataFrame, col: str) -> go.Figure:
     else:
         top = counts.copy()
 
-    total = int(top["n"].sum())
-
-    # Com 2–3 categorias, labels externas se sobrepõem — usar "inside" ou "none"
+    total     = int(top["n"].sum())
     n_cats    = len(top)
     text_pos  = "inside" if n_cats <= 3 else "outside"
     text_info = "percent+label" if n_cats <= 3 else "label"
@@ -463,7 +453,7 @@ def plot_pie(df: pd.DataFrame, col: str) -> go.Figure:
         textposition=text_pos,
         textinfo=text_info,
         insidetextorientation="radial",
-        textfont=dict(size=10, color="#E2E8F0" if text_pos == "inside" else "#3D526B", family=_F),
+        textfont=dict(size=10, family=_F),
         hovertemplate="<b>%{label}</b><br>%{value} resposta(s) (%{percent})<extra></extra>",
         sort=False,
         automargin=True,
@@ -473,7 +463,7 @@ def plot_pie(df: pd.DataFrame, col: str) -> go.Figure:
         x=0.5, y=0.5, showarrow=False,
         font=dict(size=14, color="#94A3B8", family=_F), align="center",
     )
-    fig.update_layout(**PBASE, height=340,
+    fig.update_layout(**_base(), height=340,
                       legend=dict(**PBASE["legend"], orientation="v", x=1.02, y=0.5))
     return fig
 
@@ -482,35 +472,27 @@ def plot_histogram(df: pd.DataFrame, col: str) -> go.Figure:
     s = df[col].dropna()
     if s.empty:
         return _empty()
+    if len(s) == 1 or s.nunique() == 1:
+        return _empty(f"Apenas 1 valor registrado: <b>{s.iloc[0]}</b><br>São necessários mais registros para o histograma.")
 
-    n = len(s)
-
-    # Com 1 único valor numérico, histograma não faz sentido — mostrar card simples
-    if n == 1 or s.nunique() == 1:
-        val = s.iloc[0]
-        return _empty(f"Apenas 1 valor registrado: <b>{val}</b><br>São necessários mais registros para o histograma.")
-
-    # Regra de Sturges com mínimo 2 e máximo 40 bins
-    nbins = max(2, min(40, int(np.ceil(np.log2(n) + 1))))
-
+    nbins = max(2, min(40, int(np.ceil(np.log2(len(s)) + 1))))
     fig = go.Figure(go.Histogram(
         x=s, nbinsx=nbins,
         marker=dict(color="rgba(99,102,241,0.7)", line=dict(color="#070E1A", width=0.8)),
         hovertemplate="Intervalo: %{x}<br>Frequência: %{y}<extra></extra>",
     ))
-    fig.update_layout(**PBASE, height=300, bargap=0.04,
-                      xaxis_title=col, yaxis_title="Frequência")
+    fig.update_layout(**_base(), height=300, bargap=0.04)
+    fig.update_xaxes(**PBASE["xaxis"], title_text=col)
+    fig.update_yaxes(**PBASE["yaxis"], title_text="Frequência")
     return fig
 
 
 def plot_boxplot(df: pd.DataFrame, col: str, group_col: str = None) -> go.Figure:
-    base = {k: v for k, v in PBASE.items() if k not in ("xaxis", "yaxis")}
- 
     if group_col and group_col != col:
         groups = df[group_col].value_counts().head(8).index.tolist()
         if not groups:
             return _empty()
- 
+
         fig = go.Figure()
         traces_added = 0
         for i, grp in enumerate(groups):
@@ -528,36 +510,33 @@ def plot_boxplot(df: pd.DataFrame, col: str, group_col: str = None) -> go.Figure
                 hovertemplate=f"<b>{grp}</b><br>%{{y}}<extra></extra>",
             ))
             traces_added += 1
- 
+
         if traces_added == 0:
             return _empty()
- 
-        fig.update_layout(**base, height=340)
+
+        fig.update_layout(**_base(), height=340)
         fig.update_xaxes(**PBASE["xaxis"])
         fig.update_yaxes(**PBASE["yaxis"], title_text=col)
         return fig
- 
+
     else:
         s = df[col].dropna()
         if s.empty:
             return _empty()
- 
-        n   = len(s)
-        pts = "all" if n <= 10 else "outliers"
- 
-        # Com apenas 1 ponto, Plotly não desenha caixa — usar scatter
-        if n == 1:
+
+        if len(s) == 1:
             fig = go.Figure(go.Scatter(
                 x=[col], y=[s.iloc[0]],
                 mode="markers",
                 marker=dict(color="#6366F1", size=12, symbol="circle"),
                 hovertemplate=f"{col}: %{{y}}<extra></extra>",
             ))
-            fig.update_layout(**base, height=300)
+            fig.update_layout(**_base(), height=300)
             fig.update_xaxes(**PBASE["xaxis"], showticklabels=False)
             fig.update_yaxes(**PBASE["yaxis"], title_text=col)
             return fig
- 
+
+        pts = "all" if len(s) <= 10 else "outliers"
         fig = go.Figure(go.Box(
             y=s,
             marker=dict(color="#6366F1", size=5, opacity=0.7),
@@ -566,11 +545,10 @@ def plot_boxplot(df: pd.DataFrame, col: str, group_col: str = None) -> go.Figure
             boxpoints=pts, jitter=0.35, name=col, showlegend=False,
             hovertemplate="%{y}<extra></extra>",
         ))
-        fig.update_layout(**base, height=300)
+        fig.update_layout(**_base(), height=300)
         fig.update_xaxes(**PBASE["xaxis"])
         fig.update_yaxes(**PBASE["yaxis"], title_text=col)
         return fig
- 
 
 
 def plot_grouped_bar(df: pd.DataFrame, cat_col: str, num_col: str) -> go.Figure:
@@ -578,66 +556,44 @@ def plot_grouped_bar(df: pd.DataFrame, cat_col: str, num_col: str) -> go.Figure:
         df.groupby(cat_col, observed=True)[num_col]
         .agg(["mean", "count"]).reset_index()
         .rename(columns={"mean": "média", "count": "n"})
-        .sort_values("média", ascending=False)
-        .head(15)
+        .sort_values("média", ascending=False).head(15)
     )
     if agg.empty or agg["n"].sum() == 0:
         return _empty("Sem dados suficientes para o agrupamento.")
- 
-    max_v = float(agg["média"].max())
-    min_v = float(agg["média"].min())
-    span  = max_v - min_v
-    denom = span if span > 0 else 1
+
+    max_v  = float(agg["média"].max())
+    min_v  = float(agg["média"].min())
+    span   = max_v - min_v
+    denom  = span if span > 0 else 1
     colors = [
         f"rgba(99,102,241,{0.3 + 0.7 * max(0.0, min(1.0, (v - min_v) / denom)):.2f})"
         for v in agg["média"]
     ]
     text_pos = "outside" if len(agg) > 1 and max_v > 0 else "auto"
- 
+
     fig = go.Figure(go.Bar(
-        x=agg[cat_col].astype(str),
-        y=agg["média"],
+        x=agg[cat_col].astype(str), y=agg["média"],
         marker=dict(color=colors, line=dict(width=0)),
-        text=agg["média"].round(2),
-        textposition=text_pos,
+        text=agg["média"].round(2), textposition=text_pos,
         textfont=dict(color="#2D3F57", size=9, family=_M),
         customdata=agg["n"],
         hovertemplate="<b>%{x}</b><br>Média: %{y:.2f}<br>N: %{customdata}<extra></extra>",
     ))
- 
     y_max = max_v if max_v > 0 else 1
     y_min = min(0.0, min_v)
- 
-    # Aplicar PBASE sem xaxis/yaxis para evitar conflito de chaves duplicadas
-    base = {k: v for k, v in PBASE.items() if k not in ("xaxis", "yaxis")}
-    fig.update_layout(**base, height=320, bargap=0.28)
- 
-    # Aplicar eixos separadamente via update_xaxes / update_yaxes
+    fig.update_layout(**_base(), height=320, bargap=0.28)
     fig.update_xaxes(**PBASE["xaxis"], title_text=cat_col)
     fig.update_yaxes(**PBASE["yaxis"], title_text=f"Média de {num_col}", range=[y_min, y_max * 1.28])
- 
     return fig
 
 
 def plot_heatmap(df: pd.DataFrame, num_cols: list):
-    if len(num_cols) < 2:
-        return None
-
-    # Remover colunas com variância zero (constantes) — corr() gera NaN
     valid = [c for c in num_cols if df[c].dropna().nunique() > 1]
-    if len(valid) < 2:
+    if len(valid) < 2 or len(df.dropna(subset=valid)) < 2:
         return None
 
-    # Precisa de pelo menos 2 linhas para calcular correlação
-    if len(df.dropna(subset=valid)) < 2:
-        return None
-
-    corr = df[valid].corr().round(3)
-
-    # Substituir NaN restantes por 0 para não quebrar o heatmap
-    corr = corr.fillna(0)
-
-    fig = go.Figure(go.Heatmap(
+    corr = df[valid].corr().round(3).fillna(0)
+    fig  = go.Figure(go.Heatmap(
         z=corr.values, x=corr.columns.tolist(), y=corr.index.tolist(),
         colorscale=[[0, "#0E7490"], [0.5, "#070E1A"], [1, "#4F46E5"]],
         zmin=-1, zmax=1,
@@ -647,7 +603,9 @@ def plot_heatmap(df: pd.DataFrame, num_cols: list):
         showscale=True,
         colorbar=dict(tickfont=dict(color="#2D3F57", size=9, family=_M), outlinewidth=0, thickness=10),
     ))
-    fig.update_layout(**PBASE, height=max(300, len(valid) * 54))
+    fig.update_layout(**_base(), height=max(300, len(valid) * 54))
+    fig.update_xaxes(**PBASE["xaxis"])
+    fig.update_yaxes(**PBASE["yaxis"])
     return fig
 
 
@@ -696,19 +654,21 @@ def build_sidebar(df: pd.DataFrame, classification: dict) -> pd.DataFrame:
         <div class="sb-body">
         """, unsafe_allow_html=True)
 
-        df_f = df.copy()
+        df_f   = df.copy()
+        active = []
+
         cat_cols = [
             c for c, t in classification.items()
-            if t in ("categorical_nominal","categorical_ordinal","numeric_discrete")
+            if t in ("categorical_nominal", "categorical_ordinal", "numeric_discrete")
             and 2 <= df[c].nunique() <= 20
         ]
         num_cols = [
             c for c, t in classification.items()
-            if t in ("numeric_continuous","numeric_discrete") and df[c].nunique() > 1
+            if t in ("numeric_continuous", "numeric_discrete")
+            and df[c].dropna().nunique() > 1
         ]
-        active = []
 
-        # Categóricas
+        # ── Filtros categóricos ───────────────────────────────────────────
         if cat_cols:
             st.markdown("""
             <div class="sb-section">
@@ -716,18 +676,22 @@ def build_sidebar(df: pd.DataFrame, classification: dict) -> pd.DataFrame:
                 <span class="sb-section-text">Variáveis Categóricas</span>
             </div>
             """, unsafe_allow_html=True)
-            for col in cat_cols[:5]:
+
+            for col in cat_cols[:6]:
                 opts = sorted(df[col].dropna().unique().tolist(), key=str)
                 sel  = st.multiselect(
-                    col, options=opts, default=[],
-                    key=f"fc_{col}", placeholder=f"Todas ({len(opts)})",
+                    label=col,
+                    options=opts,
+                    default=[],
+                    key=f"fc_{col}",
+                    placeholder=f"Todas ({len(opts)})",
                     help=f"{len(opts)} categorias disponíveis",
                 )
                 if sel:
-                    df_f   = df_f[df_f[col].isin(sel)]
+                    df_f = df_f[df_f[col].isin(sel)]
                     active.append(col)
 
-        # Numéricas
+        # ── Filtros numéricos ─────────────────────────────────────────────
         if num_cols:
             st.markdown("""
             <div class="sb-section">
@@ -735,23 +699,32 @@ def build_sidebar(df: pd.DataFrame, classification: dict) -> pd.DataFrame:
                 <span class="sb-section-text">Variáveis Numéricas</span>
             </div>
             """, unsafe_allow_html=True)
+
             for col in num_cols[:3]:
                 cd   = df[col].dropna()
-                if cd.empty: continue
-                cmin = float(cd.min()); cmax = float(cd.max())
-                if cmin >= cmax: continue
+                cmin = float(cd.min())
+                cmax = float(cd.max())
+                if cmin >= cmax:
+                    continue
                 st.markdown(f'<span class="sb-sl-label">{col}</span>', unsafe_allow_html=True)
-                rng = st.slider(col, min_value=cmin, max_value=cmax,
-                                value=(cmin, cmax), key=f"fn_{col}",
-                                label_visibility="collapsed", format="%.3g")
+                rng = st.slider(
+                    label=col,
+                    min_value=cmin,
+                    max_value=cmax,
+                    value=(cmin, cmax),
+                    key=f"fn_{col}",
+                    label_visibility="collapsed",
+                    format="%.3g",
+                )
                 if rng != (cmin, cmax):
-                    df_f   = df_f[df_f[col].between(rng[0], rng[1])]
+                    df_f = df_f[df_f[col].between(rng[0], rng[1])]
                     active.append(col)
 
-        # Contador
+        # ── Contador ──────────────────────────────────────────────────────
         total    = len(df)
         filtered = len(df_f)
         pct      = filtered / max(total, 1) * 100
+
         st.markdown(f"""
         <div class="sb-counter">
             <div class="sb-counter-lbl">Registros selecionados</div>
@@ -760,15 +733,18 @@ def build_sidebar(df: pd.DataFrame, classification: dict) -> pd.DataFrame:
                 <span class="sb-of">de {total:,}</span>
                 <span class="sb-pct">{pct:.1f}%</span>
             </div>
-            <div class="sb-track"><div class="sb-fill" style="width:{pct:.2f}%;"></div></div>
+            <div class="sb-track">
+                <div class="sb-fill" style="width:{pct:.2f}%;"></div>
+            </div>
         </div>
         """, unsafe_allow_html=True)
 
         if active:
-            if st.button("↺  Limpar todos os filtros", use_container_width=True):
+            if st.button("Limpar todos os filtros", use_container_width=True):
                 st.rerun()
 
         st.markdown("</div>", unsafe_allow_html=True)
+
     return df_f
 
 
@@ -777,7 +753,6 @@ def build_sidebar(df: pd.DataFrame, classification: dict) -> pd.DataFrame:
 # ─────────────────────────────────────────────────────────────────────────────
 
 def render_visualizations(df: pd.DataFrame, classification: dict):
-    # Categóricas: aceitar mesmo com 1 valor único (o gráfico de barras funciona; pizza mostrará aviso)
     cat_cols = [
         c for c, t in classification.items()
         if t in ("categorical_nominal", "categorical_ordinal")
@@ -789,9 +764,9 @@ def render_visualizations(df: pd.DataFrame, classification: dict):
         and not df[c].dropna().empty
     ]
 
-    tabs = st.tabs(["  Categóricas  ","  Numéricas  ","  Comparações  ","  Correlação  "])
+    tabs = st.tabs(["  Categóricas  ", "  Numéricas  ", "  Comparações  ", "  Correlação  "])
 
-    # TAB 1
+    # ── TAB 1 ─────────────────────────────────────────────────────────────
     with tabs[0]:
         if not cat_cols:
             st.markdown('<div class="info-box">Nenhuma variável categórica encontrada.</div>', unsafe_allow_html=True)
@@ -809,7 +784,7 @@ def render_visualizations(df: pd.DataFrame, classification: dict):
                 st.plotly_chart(plot_pie(df, sel), use_container_width=True, config=_cfg())
                 st.markdown("</div>", unsafe_allow_html=True)
 
-    # TAB 2
+    # ── TAB 2 ─────────────────────────────────────────────────────────────
     with tabs[1]:
         if not num_cols:
             st.markdown('<div class="info-box">Nenhuma variável numérica encontrada.</div>', unsafe_allow_html=True)
@@ -830,20 +805,23 @@ def render_visualizations(df: pd.DataFrame, classification: dict):
             st.markdown("<br>", unsafe_allow_html=True)
             section_header("Estatísticas Descritivas")
             desc   = df[sel].describe().round(4)
-            labels = {"count":"Registros","mean":"Média","std":"Desvio-Padrão",
-                      "min":"Mínimo","25%":"Q1","50%":"Mediana","75%":"Q3","max":"Máximo"}
+            labels = {
+                "count": "Registros", "mean": "Média", "std": "Desvio-Padrão",
+                "min": "Mínimo", "25%": "Q1", "50%": "Mediana",
+                "75%": "Q3", "max": "Máximo",
+            }
             sc = st.columns(len(desc))
             for i, (stat, val) in enumerate(desc.items()):
                 with sc[i]:
                     st.markdown(
                         f'<div class="kpi-card" style="padding:.85rem 1rem;">'
-                        f'<div class="kpi-lbl">{labels.get(stat,stat)}</div>'
+                        f'<div class="kpi-lbl">{labels.get(stat, stat)}</div>'
                         f'<div class="kpi-val" style="font-size:1.1rem;color:#818CF8;">{val:,.3g}</div>'
                         f'</div>',
                         unsafe_allow_html=True,
                     )
 
-    # TAB 3
+    # ── TAB 3 ─────────────────────────────────────────────────────────────
     with tabs[2]:
         if not cat_cols or not num_cols:
             st.markdown('<div class="info-box">São necessárias pelo menos uma variável categórica e uma numérica para gerar comparações.</div>', unsafe_allow_html=True)
@@ -863,27 +841,19 @@ def render_visualizations(df: pd.DataFrame, classification: dict):
                 st.plotly_chart(plot_boxplot(df, val, grp), use_container_width=True, config=_cfg())
                 st.markdown("</div>", unsafe_allow_html=True)
 
-    # TAB 4
+    # ── TAB 4 ─────────────────────────────────────────────────────────────
     with tabs[3]:
-        # Filtrar apenas colunas com variância real (>1 valor único) e ≥2 linhas válidas
         valid_num = [c for c in num_cols if df[c].dropna().nunique() > 1]
         if len(valid_num) < 2:
-            st.markdown(
-                '<div class="info-box">São necessárias pelo menos 2 variáveis numéricas '
-                'com valores distintos para calcular correlações.</div>',
-                unsafe_allow_html=True,
-            )
+            st.markdown('<div class="info-box">São necessárias pelo menos 2 variáveis numéricas com valores distintos para calcular correlações.</div>', unsafe_allow_html=True)
         elif len(df.dropna(subset=valid_num)) < 2:
-            st.markdown(
-                '<div class="info-box">São necessários pelo menos 2 registros completos '
-                'para calcular correlações.</div>',
-                unsafe_allow_html=True,
-            )
+            st.markdown('<div class="info-box">São necessários pelo menos 2 registros completos para calcular correlações.</div>', unsafe_allow_html=True)
         else:
             hm = plot_heatmap(df, valid_num)
             if hm:
                 st.markdown('<div class="chart-wrap">', unsafe_allow_html=True)
-                chart_header("Pearson", "Mapa de Correlação", "Coeficiente de Pearson entre variáveis numéricas (−1 a +1)")
+                chart_header("Pearson", "Mapa de Correlação",
+                             "Coeficiente de Pearson entre variáveis numéricas (−1 a +1)")
                 st.plotly_chart(hm, use_container_width=True, config=_cfg())
                 st.markdown("</div>", unsafe_allow_html=True)
                 st.markdown("<br>", unsafe_allow_html=True)
@@ -892,7 +862,8 @@ def render_visualizations(df: pd.DataFrame, classification: dict):
                 pairs  = [
                     {"Variável A": valid_num[i], "Variável B": valid_num[j],
                      "Correlação": round(corr_m.iloc[i, j], 4)}
-                    for i in range(len(valid_num)) for j in range(i+1, len(valid_num))
+                    for i in range(len(valid_num))
+                    for j in range(i + 1, len(valid_num))
                 ]
                 if pairs:
                     st.dataframe(
@@ -912,7 +883,7 @@ def render_insights(df: pd.DataFrame, classification: dict):
         return
 
     for row_s in range(0, len(insights), 3):
-        row  = insights[row_s:row_s+3]
+        row  = insights[row_s:row_s + 3]
         cols = st.columns(3, gap="small")
         for i, ins in enumerate(row):
             ac = "#6366F1" if ins["type"] == "numeric" else "#06B6D4"
@@ -936,11 +907,13 @@ def render_methodology(df: pd.DataFrame, classification: dict):
     rows = ""
     for col, vt in classification.items():
         nu = df[col].nunique()
-        cp = round((1 - df[col].isnull().sum() / max(len(df),1)) * 100, 1)
+        cp = round((1 - df[col].isnull().sum() / max(len(df), 1)) * 100, 1)
         rows += (
             f"<tr><td><code>{col}</code></td><td>{type_pill(vt)}</td>"
-            f"<td style='text-align:center;font-family:\"JetBrains Mono\",monospace;font-size:.75rem;color:#3D526B;'>{nu}</td>"
-            f"<td style='text-align:center;font-family:\"JetBrains Mono\",monospace;font-size:.75rem;color:#3D526B;'>{cp}%</td></tr>"
+            f"<td style='text-align:center;font-family:\"JetBrains Mono\",monospace;"
+            f"font-size:.75rem;color:#3D526B;'>{nu}</td>"
+            f"<td style='text-align:center;font-family:\"JetBrains Mono\",monospace;"
+            f"font-size:.75rem;color:#3D526B;'>{cp}%</td></tr>"
         )
     st.markdown(
         f'<table class="meth-table"><thead><tr>'
@@ -963,7 +936,11 @@ def main():
         raw_df = fetch_data()
 
     if raw_df.empty:
-        st.markdown('<div class="warn-box"><strong>Atenção:</strong> Não foi possível carregar os dados da planilha. Veja o diagnóstico abaixo.</div>', unsafe_allow_html=True)
+        st.markdown(
+            '<div class="warn-box"><strong>Atenção:</strong> Não foi possível carregar '
+            'os dados da planilha. Veja o diagnóstico abaixo.</div>',
+            unsafe_allow_html=True,
+        )
         with st.expander("Diagnóstico da conexão", expanded=True):
             from utils import CSV_EXPORT_URL, SHEET_ID, SHEET_GID
             st.markdown("**URL de exportação CSV:**")
@@ -982,7 +959,7 @@ def main():
     kpis           = compute_kpis(df, classification)
     df_f           = build_sidebar(df, classification)
 
-    # ── Header ────────────────────────────────────────────────────────────────
+    # ── Header ───────────────────────────────────────────────────────────────
     st.markdown("""
     <div class="dash-header">
         <div class="dash-eyebrow">
@@ -999,9 +976,9 @@ def main():
     </div>
     """, unsafe_allow_html=True)
 
-    # ── KPIs ──────────────────────────────────────────────────────────────────
+    # ── KPIs ─────────────────────────────────────────────────────────────────
     section_header("Visão Geral", "Métricas extraídas do conjunto de dados carregado")
-    cards  = [
+    cards = [
         ("Registros Totais", f"{kpis['total_records']:,}",  "respostas coletadas",   "#6366F1"),
         ("Variáveis",        f"{kpis['total_columns']}",     "campos analisados",     "#8B5CF6"),
         ("Completude",       f"{kpis['completeness']}%",     "dados preenchidos",     "#10B981"),
@@ -1034,8 +1011,10 @@ def main():
 
     # ── Metodologia ───────────────────────────────────────────────────────────
     with st.expander("Metodologia — Classificação de Variáveis", expanded=False):
-        section_header("Classificação Automática de Variáveis",
-                        "Cada variável foi classificada com base no tipo de dado e no número de valores únicos.")
+        section_header(
+            "Classificação Automática de Variáveis",
+            "Cada variável foi classificada com base no tipo de dado e no número de valores únicos."
+        )
         render_methodology(df, classification)
         st.markdown("<br>", unsafe_allow_html=True)
         st.markdown("""
@@ -1053,38 +1032,55 @@ def main():
     st.markdown('<hr class="divider">', unsafe_allow_html=True)
 
     # ── Visualizações ─────────────────────────────────────────────────────────
-    section_header("Análise Exploratória",
-                    "Visualizações interativas segmentadas por tipo de variável — selecione a aba desejada")
+    section_header(
+        "Análise Exploratória",
+        "Visualizações interativas segmentadas por tipo de variável — selecione a aba desejada"
+    )
     render_visualizations(df_f, classification)
 
     st.markdown('<hr class="divider">', unsafe_allow_html=True)
 
     # ── Insights ──────────────────────────────────────────────────────────────
-    section_header("Insights Automáticos",
-                    "Padrões e estatísticas relevantes identificados no conjunto de dados filtrado")
+    section_header(
+        "Insights Automáticos",
+        "Padrões e estatísticas relevantes identificados no conjunto de dados filtrado"
+    )
     render_insights(df_f, classification)
 
     st.markdown('<hr class="divider">', unsafe_allow_html=True)
 
     # ── Tabela ────────────────────────────────────────────────────────────────
-    section_header("Tabela de Dados",
-                    f"{len(df_f):,} linhas × {len(df_f.columns)} colunas — dados filtrados")
-    sc, dc = st.columns([4,1], gap="small")
+    section_header(
+        "Tabela de Dados",
+        f"{len(df_f):,} linhas × {len(df_f.columns)} colunas — dados filtrados"
+    )
+    sc, dc = st.columns([4, 1], gap="small")
     with sc:
-        search = st.text_input("Busca", placeholder="Buscar em todos os campos...",
-                                key="tbl_s", label_visibility="collapsed")
+        search = st.text_input(
+            "Busca", placeholder="Buscar em todos os campos...",
+            key="tbl_s", label_visibility="collapsed",
+        )
     with dc:
-        st.download_button("Exportar CSV",
-                           data=df_f.to_csv(index=False).encode("utf-8"),
-                           file_name="dados_filtrados.csv", mime="text/csv",
-                           use_container_width=True)
+        st.download_button(
+            "Exportar CSV",
+            data=df_f.to_csv(index=False).encode("utf-8"),
+            file_name="dados_filtrados.csv",
+            mime="text/csv",
+            use_container_width=True,
+        )
 
     display = df_f
     if search:
-        mask    = display.astype(str).apply(lambda c: c.str.contains(search, case=False, na=False)).any(axis=1)
+        mask    = display.astype(str).apply(
+            lambda c: c.str.contains(search, case=False, na=False)
+        ).any(axis=1)
         display = display[mask]
         if display.empty:
-            st.markdown(f'<div class="info-box">Nenhum resultado encontrado para "<strong>{search}</strong>".</div>', unsafe_allow_html=True)
+            st.markdown(
+                f'<div class="info-box">Nenhum resultado encontrado para '
+                f'"<strong>{search}</strong>".</div>',
+                unsafe_allow_html=True,
+            )
 
     st.dataframe(display, use_container_width=True, height=420)
 
