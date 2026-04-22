@@ -394,32 +394,36 @@ def plot_bar(df: pd.DataFrame, col: str) -> go.Figure:
     counts = counts.sort_values("n", ascending=True).tail(25)
     if counts.empty:
         return _empty()
-
-    max_n  = counts["n"].max()
-    # Evita divisão por zero quando há apenas 1 valor único
-    denom  = max_n if max_n > 0 else 1
-    colors = [f"rgba(99,102,241,{0.3 + 0.7*(v/denom):.2f})" for v in counts["n"]]
-
-    # Altura mínima para não colapsar com poucos itens
+ 
+    max_n = int(counts["n"].max())
+    denom = max_n if max_n > 0 else 1
+    colors = [f"rgba(99,102,241,{0.3 + 0.7 * (v / denom):.2f})" for v in counts["n"]]
     bar_height = max(260, len(counts) * 44)
-
+ 
     fig = go.Figure(go.Bar(
-        x=counts["n"], y=counts[col].astype(str),
+        x=counts["n"],
+        y=counts[col].astype(str),
         orientation="h",
         marker=dict(color=colors, line=dict(width=0)),
-        text=counts["n"], textposition="outside",
+        text=counts["n"],
+        textposition="outside",
         textfont=dict(color="#2D3F57", size=10, family=_M),
         hovertemplate="<b>%{y}</b><br>Contagem: %{x}<extra></extra>",
     ))
-    fig.update_layout(
-        **PBASE, height=bar_height,
-        yaxis=dict(**PBASE["yaxis"], categoryorder="total ascending"),
-        xaxis=dict(
-            **PBASE["xaxis"], showgrid=False,
-            # Margem mínima de 2 para não colapsar quando max_n == 1
-            range=[0, max(max_n * 1.3, 2)],
-        ),
-        bargap=0.3,
+ 
+    # Aplicar PBASE sem xaxis/yaxis para evitar conflito de chaves duplicadas
+    base = {k: v for k, v in PBASE.items() if k not in ("xaxis", "yaxis")}
+    fig.update_layout(**base, height=bar_height, bargap=0.3)
+ 
+    # Aplicar eixos separadamente via update_xaxes / update_yaxes
+    fig.update_xaxes(
+        **PBASE["xaxis"],
+        showgrid=False,
+        range=[0, max(max_n * 1.3, 2)],
+    )
+    fig.update_yaxes(
+        **PBASE["yaxis"],
+        categoryorder="total ascending",
     )
     return fig
 
@@ -564,39 +568,44 @@ def plot_grouped_bar(df: pd.DataFrame, cat_col: str, num_col: str) -> go.Figure:
         df.groupby(cat_col, observed=True)[num_col]
         .agg(["mean", "count"]).reset_index()
         .rename(columns={"mean": "média", "count": "n"})
-        .sort_values("média", ascending=False).head(15)
+        .sort_values("média", ascending=False)
+        .head(15)
     )
     if agg.empty or agg["n"].sum() == 0:
         return _empty("Sem dados suficientes para o agrupamento.")
-
-    max_v  = agg["média"].max()
-    min_v  = agg["média"].min()
-    span   = max_v - min_v
-    # Normaliza entre min e max para suportar médias negativas sem divisão por zero
-    denom  = span if span > 0 else 1
+ 
+    max_v = float(agg["média"].max())
+    min_v = float(agg["média"].min())
+    span  = max_v - min_v
+    denom = span if span > 0 else 1
     colors = [
         f"rgba(99,102,241,{0.3 + 0.7 * max(0.0, min(1.0, (v - min_v) / denom)):.2f})"
         for v in agg["média"]
     ]
-
-    # Com valores pequenos ou 1 barra, "outside" pode sair do canvas
     text_pos = "outside" if len(agg) > 1 and max_v > 0 else "auto"
-
+ 
     fig = go.Figure(go.Bar(
-        x=agg[cat_col].astype(str), y=agg["média"],
+        x=agg[cat_col].astype(str),
+        y=agg["média"],
         marker=dict(color=colors, line=dict(width=0)),
-        text=agg["média"].round(2), textposition=text_pos,
+        text=agg["média"].round(2),
+        textposition=text_pos,
         textfont=dict(color="#2D3F57", size=9, family=_M),
         customdata=agg["n"],
         hovertemplate="<b>%{x}</b><br>Média: %{y:.2f}<br>N: %{customdata}<extra></extra>",
     ))
+ 
     y_max = max_v if max_v > 0 else 1
-    y_min = min(0, min_v)
-    fig.update_layout(
-        **PBASE, height=320, bargap=0.28,
-        xaxis_title=cat_col, yaxis_title=f"Média de {num_col}",
-        yaxis=dict(**PBASE["yaxis"], range=[y_min, y_max * 1.28]),
-    )
+    y_min = min(0.0, min_v)
+ 
+    # Aplicar PBASE sem xaxis/yaxis para evitar conflito de chaves duplicadas
+    base = {k: v for k, v in PBASE.items() if k not in ("xaxis", "yaxis")}
+    fig.update_layout(**base, height=320, bargap=0.28)
+ 
+    # Aplicar eixos separadamente via update_xaxes / update_yaxes
+    fig.update_xaxes(**PBASE["xaxis"], title_text=cat_col)
+    fig.update_yaxes(**PBASE["yaxis"], title_text=f"Média de {num_col}", range=[y_min, y_max * 1.28])
+ 
     return fig
 
 
